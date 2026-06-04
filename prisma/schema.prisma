@@ -79,6 +79,7 @@ model User {
   passwordResetExpiresAt DateTime?
   role           UserRole       @default(USER)
   status         UserStatus     @default(ACTIVE)
+  profileImageUrl String?
   kycStatus      KycStatus      @default(NOT_SUBMITTED)
   kycDocumentType String?
   kycDocumentUrl String?
