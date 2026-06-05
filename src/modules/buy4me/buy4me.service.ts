@@ -1,4 +1,9 @@
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { Buy4MeStatus, KycStatus, Prisma, UserRole } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
 import { CreateBuy4MeDto } from "./dto/create-buy4me.dto";
@@ -8,6 +13,7 @@ import { AuditService } from "../audit/audit.service";
 import { SubmitBuy4MePaymentDto } from "./dto/submit-buy4me-payment.dto";
 import { UpdateBuy4MeStatusDto } from "./dto/update-buy4me-status.dto";
 import { CancelBuy4MeDto } from "./dto/cancel-buy4me.dto";
+import { RedisService } from "../../infrastructure/redis/redis.service";
 
 function defaultTimelineForStatus(status: Buy4MeStatus) {
   switch (status) {
@@ -31,13 +37,26 @@ function defaultTimelineForStatus(status: Buy4MeStatus) {
   }
 }
 
+function formatNaira(amount: number) {
+  return new Intl.NumberFormat("en-NG", {
+    style: "currency",
+    currency: "NGN",
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
 @Injectable()
 export class Buy4MeService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
     private readonly auditService: AuditService,
+    private readonly redis: RedisService,
   ) {}
+
+  private clearDashboardCache() {
+    return this.redis.delete("admin:dashboard:metrics");
+  }
 
   private serializeOrder(order: {
     id: string;
@@ -117,6 +136,7 @@ export class Buy4MeService {
     await this.auditService.log(payload.userId, "CREATED", "buy4me", order.id, {
       productLink: payload.productLink,
     });
+    await this.clearDashboardCache();
     return this.serializeOrder(order);
   }
 
@@ -155,11 +175,12 @@ export class Buy4MeService {
     await this.notificationsService.create(
       order.userId,
       "Buy4Me quote ready",
-      `Your Buy4Me order total is ${totalCost}. Payment is now required to continue.`,
+      `Your Buy4Me order total is ${formatNaira(totalCost)}. Payment is now required to continue.`,
     );
     await this.auditService.log(payload.actorId, "PRICED", "buy4me", order.id, {
       totalCost,
     });
+    await this.clearDashboardCache();
     return this.serializeOrder(updatedOrder);
   }
 
@@ -195,6 +216,7 @@ export class Buy4MeService {
       "Buy4Me payment submitted",
       `Payment proof has been uploaded for Buy4Me order ${order.id}.`,
     );
+    await this.clearDashboardCache();
 
     return this.serializeOrder(updatedOrder);
   }
@@ -234,6 +256,7 @@ export class Buy4MeService {
     await this.auditService.log(order.userId, "CANCELLED", "buy4me", order.id, {
       reason,
     });
+    await this.clearDashboardCache();
 
     return this.serializeOrder(updatedOrder);
   }
@@ -244,6 +267,12 @@ export class Buy4MeService {
     });
     if (!order) {
       throw new NotFoundException("Order not found");
+    }
+
+    if (payload.status === "AWAITING_PAYMENT" && !order.totalCost) {
+      throw new BadRequestException(
+        "Add product cost, shipping cost, and service charge before requesting customer payment.",
+      );
     }
 
     const updatedOrder = await this.prisma.buy4MeOrder.update({
@@ -267,6 +296,7 @@ export class Buy4MeService {
       timelineUpdate: payload.timelineUpdate,
       adminNote: payload.adminNote,
     });
+    await this.clearDashboardCache();
 
     return this.serializeOrder(updatedOrder);
   }

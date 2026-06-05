@@ -1,10 +1,147 @@
 import { Injectable } from "@nestjs/common";
+import { Buy4MeStatus, Prisma, TransactionType } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
 import { RedisService } from "../../infrastructure/redis/redis.service";
 import { UsersService } from "../users/users.service";
 import { WalletService } from "../wallet/wallet.service";
 import { AuditService } from "../audit/audit.service";
 import { NotificationsService } from "../notifications/notifications.service";
+
+const buy4MeStatusSegments: Array<{
+  label: string;
+  statuses: Buy4MeStatus[];
+  color: string;
+  chartColor: string;
+}> = [
+  {
+    label: "Processing",
+    statuses: ["PROCESSING", "PAYMENT_SUBMITTED", "PURCHASING", "ISSUE"],
+    color: "bg-orange-500",
+    chartColor: "#f97316",
+  },
+  {
+    label: "Awaiting Payment",
+    statuses: ["AWAITING_PAYMENT"],
+    color: "bg-blue-600",
+    chartColor: "#2563eb",
+  },
+  {
+    label: "Shipped",
+    statuses: ["SHIPPED"],
+    color: "bg-sky-500",
+    chartColor: "#0ea5e9",
+  },
+  {
+    label: "Delivered",
+    statuses: ["COMPLETED"],
+    color: "bg-emerald-600",
+    chartColor: "#059669",
+  },
+  {
+    label: "Cancelled",
+    statuses: ["CANCELLED"],
+    color: "bg-rose-500",
+    chartColor: "#e11d48",
+  },
+];
+
+export interface DashboardMetrics {
+  totalUsers: number;
+  totalDeposits: number;
+  totalWithdrawals: number;
+  totalTransactions: number;
+  totalBuy4MeOrders: number;
+  pendingRequests: number;
+  monthlyOverview: Array<{
+    key: string;
+    label: string;
+    deposits: number;
+    withdrawals: number;
+    buy4me: number;
+  }>;
+  buy4meStatusBreakdown: Array<{
+    label: string;
+    value: number;
+    color: string;
+    chartColor: string;
+  }>;
+  recentActivities: Array<{
+    id: string;
+    actorId: string;
+    action: string;
+    entityType: string;
+    entityId: string;
+    metadata?: unknown;
+    createdAt: string;
+  }>;
+}
+
+function monthKey(date: Date) {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function roundMoney(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+function buildMonthlyOverview(
+  startDate: Date,
+  transactions: Array<{
+    type: TransactionType;
+    nairaEquivalent: Prisma.Decimal;
+    createdAt: Date;
+  }>,
+  buy4meOrders: Array<{
+    totalCost: Prisma.Decimal | null;
+    createdAt: Date;
+  }>,
+) {
+  const formatter = new Intl.DateTimeFormat("en-NG", { month: "short" });
+  const buckets = Array.from({ length: 12 }, (_, index) => {
+    const date = new Date(
+      Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth() + index, 1),
+    );
+
+    return {
+      key: monthKey(date),
+      label: formatter.format(date),
+      deposits: 0,
+      withdrawals: 0,
+      buy4me: 0,
+    };
+  });
+  const bucketMap = new Map(buckets.map((bucket) => [bucket.key, bucket]));
+
+  transactions.forEach((transaction) => {
+    const bucket = bucketMap.get(monthKey(transaction.createdAt));
+    if (!bucket) {
+      return;
+    }
+
+    if (transaction.type === "DEPOSIT") {
+      bucket.deposits += transaction.nairaEquivalent.toNumber();
+      return;
+    }
+
+    bucket.withdrawals += transaction.nairaEquivalent.toNumber();
+  });
+
+  buy4meOrders.forEach((order) => {
+    const bucket = bucketMap.get(monthKey(order.createdAt));
+    if (!bucket || !order.totalCost) {
+      return;
+    }
+
+    bucket.buy4me += order.totalCost.toNumber();
+  });
+
+  return buckets.map((bucket) => ({
+    ...bucket,
+    deposits: roundMoney(bucket.deposits),
+    withdrawals: roundMoney(bucket.withdrawals),
+    buy4me: roundMoney(bucket.buy4me),
+  }));
+}
 
 @Injectable()
 export class AdminService {
@@ -19,29 +156,27 @@ export class AdminService {
 
   async getDashboardMetrics() {
     const cacheKey = "admin:dashboard:metrics";
-    const cachedMetrics = await this.redis.getJson<{
-      totalUsers: number;
-      totalDeposits: number;
-      totalWithdrawals: number;
-      totalTransactions: number;
-      pendingRequests: number;
-      recentActivities: Array<{
-        id: string;
-        actorId: string;
-        action: string;
-        entityType: string;
-        entityId: string;
-        metadata?: unknown;
-        createdAt: string;
-      }>;
-    }>(cacheKey);
+    const cachedMetrics = await this.redis.getJson<DashboardMetrics>(cacheKey);
 
     if (cachedMetrics) {
       return cachedMetrics;
     }
 
-    const [totalUsers, totalTransactions, pendingRequests, confirmedTransactions, recentActivities] =
-      await Promise.all([
+    const now = new Date();
+    const monthlyStart = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 11, 1),
+    );
+
+    const [
+      totalUsers,
+      totalTransactions,
+      pendingRequests,
+      confirmedTransactions,
+      monthlyTransactions,
+      monthlyBuy4MeOrders,
+      buy4MeStatusCounts,
+      recentActivities,
+    ] = await Promise.all([
         this.prisma.user.count(),
         this.prisma.transaction.count(),
         this.prisma.transaction.count({
@@ -59,6 +194,35 @@ export class AdminService {
             nairaEquivalent: true,
           },
         }),
+        this.prisma.transaction.findMany({
+          where: {
+            createdAt: { gte: monthlyStart },
+            status: "CONFIRMED",
+            type: {
+              in: ["DEPOSIT", "WITHDRAWAL"],
+            },
+          },
+          select: {
+            type: true,
+            nairaEquivalent: true,
+            createdAt: true,
+          },
+        }),
+        this.prisma.buy4MeOrder.findMany({
+          where: {
+            createdAt: { gte: monthlyStart },
+            status: { not: "CANCELLED" },
+            totalCost: { not: null },
+          },
+          select: {
+            totalCost: true,
+            createdAt: true,
+          },
+        }),
+        this.prisma.buy4MeOrder.groupBy({
+          by: ["status"],
+          _count: { _all: true },
+        }),
         this.prisma.auditLog.findMany({
           orderBy: { createdAt: "desc" },
           take: 10,
@@ -73,12 +237,36 @@ export class AdminService {
       .filter((item) => item.type === "WITHDRAWAL")
       .reduce((sum, item) => sum + item.nairaEquivalent.toNumber(), 0);
 
-    const metrics = {
+    const statusCountMap = new Map<Buy4MeStatus, number>(
+      buy4MeStatusCounts.map((item) => [item.status, item._count._all]),
+    );
+    const buy4meStatusBreakdown = buy4MeStatusSegments.map((segment) => ({
+      label: segment.label,
+      value: segment.statuses.reduce(
+        (sum, status) => sum + (statusCountMap.get(status) ?? 0),
+        0,
+      ),
+      color: segment.color,
+      chartColor: segment.chartColor,
+    }));
+    const totalBuy4MeOrders = buy4meStatusBreakdown.reduce(
+      (sum, item) => sum + item.value,
+      0,
+    );
+
+    const metrics: DashboardMetrics = {
       totalUsers,
       totalDeposits,
       totalWithdrawals,
       totalTransactions,
+      totalBuy4MeOrders,
       pendingRequests,
+      monthlyOverview: buildMonthlyOverview(
+        monthlyStart,
+        monthlyTransactions,
+        monthlyBuy4MeOrders,
+      ),
+      buy4meStatusBreakdown,
       recentActivities: recentActivities.map((entry) => ({
         id: entry.id,
         actorId: entry.actorId,
