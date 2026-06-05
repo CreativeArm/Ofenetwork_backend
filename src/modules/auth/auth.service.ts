@@ -53,6 +53,7 @@ export class AuthService {
   private readonly refreshTokenSecret =
     process.env.JWT_REFRESH_SECRET ?? "dev-refresh-secret-change-me";
   private readonly oauthStateTtlSeconds = 10 * 60;
+  private readonly oauthFetchTimeoutMs = 12_000;
   private readonly passwordResetTtlMinutes = 30;
   private readonly oauthStates = new Map<string, OAuthStateRecord>();
 
@@ -229,23 +230,56 @@ export class AuthService {
     return data as T;
   }
 
+  private async fetchOAuthProvider(
+    url: string | URL,
+    init: RequestInit | undefined,
+    context: string,
+  ) {
+    const controller = new AbortController();
+    const timeout = setTimeout(
+      () => controller.abort(),
+      this.oauthFetchTimeoutMs,
+    );
+
+    try {
+      return await fetch(url, {
+        ...(init ?? {}),
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new BadRequestException(
+          `${context} timed out. Please try social login again.`,
+        );
+      }
+
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   private async fetchGoogleProfile(
     code: string,
     config: OAuthProviderConfig,
   ): Promise<OAuthProfile> {
-    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
+    const tokenResponse = await this.fetchOAuthProvider(
+      "https://oauth2.googleapis.com/token",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          code,
+          client_id: config.clientId,
+          client_secret: config.clientSecret,
+          redirect_uri: config.redirectUri,
+          grant_type: "authorization_code",
+        }),
       },
-      body: new URLSearchParams({
-        code,
-        client_id: config.clientId,
-        client_secret: config.clientSecret,
-        redirect_uri: config.redirectUri,
-        grant_type: "authorization_code",
-      }),
-    });
+      "Google token exchange",
+    );
     const tokenData = await this.readProviderJson<{ access_token?: string }>(
       tokenResponse,
       "Google token exchange",
@@ -255,13 +289,14 @@ export class AuthService {
       throw new BadRequestException("Google did not return an access token.");
     }
 
-    const profileResponse = await fetch(
+    const profileResponse = await this.fetchOAuthProvider(
       "https://openidconnect.googleapis.com/v1/userinfo",
       {
         headers: {
           Authorization: `Bearer ${tokenData.access_token}`,
         },
       },
+      "Google profile lookup",
     );
     const profile = await this.readProviderJson<{
       sub?: string;
@@ -291,7 +326,11 @@ export class AuthService {
     tokenUrl.searchParams.set("redirect_uri", config.redirectUri);
     tokenUrl.searchParams.set("code", code);
 
-    const tokenResponse = await fetch(tokenUrl);
+    const tokenResponse = await this.fetchOAuthProvider(
+      tokenUrl,
+      undefined,
+      "Facebook token exchange",
+    );
     const tokenData = await this.readProviderJson<{ access_token?: string }>(
       tokenResponse,
       "Facebook token exchange",
@@ -305,7 +344,11 @@ export class AuthService {
     profileUrl.searchParams.set("fields", "id,name,email");
     profileUrl.searchParams.set("access_token", tokenData.access_token);
 
-    const profileResponse = await fetch(profileUrl);
+    const profileResponse = await this.fetchOAuthProvider(
+      profileUrl,
+      undefined,
+      "Facebook profile lookup",
+    );
     const profile = await this.readProviderJson<{
       id?: string;
       email?: string;

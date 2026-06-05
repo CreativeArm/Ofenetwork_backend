@@ -65,14 +65,20 @@ export class AuthController {
     @Query("error_description") errorDescription: string | undefined,
     @Res() response: { redirect: (url: string) => void },
   ) {
-    const url = await this.authService.socialCallback({
-      provider,
-      code,
-      state,
-      error,
-      errorDescription,
-    });
+    try {
+      const url = await this.authService.socialCallback({
+        provider,
+        code,
+        state,
+        error,
+        errorDescription,
+      });
 
-    return response.redirect(url);
+      return response.redirect(url);
+    } catch (callbackError) {
+      return response.redirect(
+        this.authService.socialLoginErrorRedirect(callbackError),
+      );
+    }
   }
 }
