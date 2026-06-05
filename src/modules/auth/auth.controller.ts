@@ -40,6 +40,11 @@ export class AuthController {
     return this.authService.logout(payload.refreshToken);
   }
 
+  @Post("social/session")
+  socialSession(@Body() payload: { code?: string }) {
+    return this.authService.consumeSocialSession(payload.code);
+  }
+
   @Get("social/:provider")
   async socialLogin(
     @Param("provider") provider: string,

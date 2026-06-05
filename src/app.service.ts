@@ -7,7 +7,7 @@ export class AppService {
       service: "OFENETWORKS API",
       status: "ok",
       release: {
-        socialAuthFix: "callback-timeout-v2",
+        socialAuthFix: "oauth-short-code-v3",
         commit: process.env.RENDER_GIT_COMMIT ?? "local",
       },
       timestamp: new Date().toISOString(),

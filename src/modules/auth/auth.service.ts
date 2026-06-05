@@ -24,6 +24,16 @@ interface OAuthStateRecord {
   createdAt: number;
 }
 
+interface OAuthSessionRecord {
+  accessToken: string;
+  refreshToken: string;
+  token: string;
+  expiresIn: string;
+  user: unknown;
+  nextPath?: string;
+  createdAt: number;
+}
+
 interface OAuthProviderConfig {
   clientId: string;
   clientSecret: string;
@@ -53,9 +63,11 @@ export class AuthService {
   private readonly refreshTokenSecret =
     process.env.JWT_REFRESH_SECRET ?? "dev-refresh-secret-change-me";
   private readonly oauthStateTtlSeconds = 10 * 60;
+  private readonly oauthSessionTtlSeconds = 2 * 60;
   private readonly oauthFetchTimeoutMs = 12_000;
   private readonly passwordResetTtlMinutes = 30;
   private readonly oauthStates = new Map<string, OAuthStateRecord>();
+  private readonly oauthSessions = new Map<string, OAuthSessionRecord>();
 
   private assertOAuthProvider(provider: string): OAuthProvider {
     if (provider === "google" || provider === "facebook") {
@@ -137,6 +149,16 @@ export class AuthService {
     }
   }
 
+  private cleanupExpiredOAuthSessions() {
+    const cutoff = Date.now() - this.oauthSessionTtlSeconds * 1000;
+
+    for (const [code, record] of this.oauthSessions.entries()) {
+      if (record.createdAt < cutoff) {
+        this.oauthSessions.delete(code);
+      }
+    }
+  }
+
   private async createOAuthState(provider: OAuthProvider, nextPath?: string) {
     this.cleanupExpiredOAuthStates();
 
@@ -172,6 +194,65 @@ export class AuthService {
     return record;
   }
 
+  private async createOAuthSession(
+    authResponse: Awaited<ReturnType<AuthService["buildAuthResponse"]>>,
+    nextPath?: string,
+  ) {
+    this.cleanupExpiredOAuthSessions();
+
+    const code = randomBytes(24).toString("hex");
+    const record: OAuthSessionRecord = {
+      accessToken: authResponse.accessToken,
+      refreshToken: authResponse.refreshToken,
+      token: authResponse.token,
+      expiresIn: authResponse.expiresIn,
+      user: authResponse.user,
+      nextPath: this.sanitizeNextPath(nextPath),
+      createdAt: Date.now(),
+    };
+
+    this.oauthSessions.set(code, record);
+    await this.redis.setJson(
+      `oauth:session:${code}`,
+      record,
+      this.oauthSessionTtlSeconds,
+    );
+
+    return code;
+  }
+
+  async consumeSocialSession(code?: string) {
+    if (!code) {
+      throw new BadRequestException("Social login session code is missing.");
+    }
+
+    const localRecord = this.oauthSessions.get(code);
+    this.oauthSessions.delete(code);
+
+    const redisKey = `oauth:session:${code}`;
+    const redisRecord = await this.redis.getJson<OAuthSessionRecord>(redisKey);
+    await this.redis.delete(redisKey);
+
+    const record = localRecord ?? redisRecord;
+    const expired =
+      record && Date.now() - record.createdAt > this.oauthSessionTtlSeconds * 1000;
+
+    if (!record || expired) {
+      throw new BadRequestException(
+        "Social login session expired. Please try again.",
+      );
+    }
+
+    return {
+      accessToken: record.accessToken,
+      refreshToken: record.refreshToken,
+      token: record.token,
+      expiresIn: record.expiresIn,
+      user: record.user,
+      next: record.nextPath,
+    };
+  }
+
   private buildOAuthErrorRedirect(error: unknown, nextPath?: string) {
     const message =
       typeof error === "string"
@@ -195,20 +276,14 @@ export class AuthService {
     return this.buildOAuthErrorRedirect(error, nextPath);
   }
 
-  private buildOAuthSuccessRedirect(
+  private async buildOAuthSuccessRedirect(
     authResponse: Awaited<ReturnType<AuthService["buildAuthResponse"]>>,
     nextPath?: string,
   ) {
+    const oauthCode = await this.createOAuthSession(authResponse, nextPath);
     const params = new URLSearchParams({
-      accessToken: authResponse.accessToken,
-      refreshToken: authResponse.refreshToken,
-      user: JSON.stringify(authResponse.user),
+      oauthCode,
     });
-    const sanitizedNextPath = this.sanitizeNextPath(nextPath);
-
-    if (sanitizedNextPath) {
-      params.set("next", sanitizedNextPath);
-    }
 
     return `${this.getFrontendUrl()}/auth/callback?${params.toString()}`;
   }
@@ -767,7 +842,7 @@ export class AuthService {
       const user = await this.getOrCreateSocialUser(profile);
       const authResponse = await this.buildAuthResponse(user);
 
-      return this.buildOAuthSuccessRedirect(authResponse, state.nextPath);
+      return await this.buildOAuthSuccessRedirect(authResponse, state.nextPath);
     } catch (error) {
       return this.buildOAuthErrorRedirect(error);
     }
