@@ -11,9 +11,11 @@ import { RatesController } from "./modules/rates/rates.controller";
 import { TestimonialsController } from "./modules/testimonials/testimonials.controller";
 import { WalletController } from "./modules/wallet/wallet.controller";
 import { KycController } from "./modules/kyc/kyc.controller";
+import { SupportController } from "./modules/support/support.controller";
 import { AppService } from "./app.service";
 import { PrismaService } from "./database/prisma.service";
 import { RedisService } from "./infrastructure/redis/redis.service";
+import { EmailService } from "./infrastructure/email/email.service";
 import { AuthService } from "./modules/auth/auth.service";
 import { UsersService } from "./modules/users/users.service";
 import { WalletService } from "./modules/wallet/wallet.service";
@@ -25,6 +27,7 @@ import { AuditService } from "./modules/audit/audit.service";
 import { RatesService } from "./modules/rates/rates.service";
 import { TestimonialsService } from "./modules/testimonials/testimonials.service";
 import { KycService } from "./modules/kyc/kyc.service";
+import { SupportService } from "./modules/support/support.service";
 
 @Module({
   imports: [JwtModule.register({})],
@@ -40,11 +43,13 @@ import { KycService } from "./modules/kyc/kyc.service";
     TestimonialsController,
     WalletController,
     KycController,
+    SupportController,
   ],
   providers: [
     AppService,
     PrismaService,
     RedisService,
+    EmailService,
     AuthService,
     UsersService,
     WalletService,
@@ -56,6 +61,7 @@ import { KycService } from "./modules/kyc/kyc.service";
     RatesService,
     TestimonialsService,
     KycService,
+    SupportService,
   ],
 })
 export class AppModule {}

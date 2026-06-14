@@ -3,6 +3,7 @@ import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcrypt";
 import { randomBytes } from "crypto";
 import { PrismaService } from "../../database/prisma.service";
+import { EmailService } from "../../infrastructure/email/email.service";
 import { RedisService } from "../../infrastructure/redis/redis.service";
 import { WalletService } from "../wallet/wallet.service";
 import { RegisterDto } from "./dto/register.dto";
@@ -52,6 +53,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
+    private readonly emailService: EmailService,
     private readonly walletService: WalletService,
     private readonly jwtService: JwtService,
   ) {}
@@ -637,11 +639,14 @@ export class AuthService {
     const email = payload.email.trim().toLowerCase();
     const genericResponse: {
       message: string;
+      emailDeliveryConfigured: boolean;
+      emailSent?: boolean;
       resetLink?: string;
       expiresAt?: string;
     } = {
       message:
         "If an account exists for this email, password reset instructions are ready.",
+      emailDeliveryConfigured: this.emailService.isConfigured(),
     };
 
     const user = await this.prisma.user.findUnique({
@@ -666,11 +671,18 @@ export class AuthService {
       },
     });
 
+    const resetLink = this.buildPasswordResetLink(email, token);
+    const emailSent = await this.emailService.sendPasswordResetEmail({
+      to: user.email,
+      name: user.fullName,
+      resetLink,
+      expiresInMinutes: this.passwordResetTtlMinutes,
+    });
+
     return {
       ...genericResponse,
-      resetLink: this.shouldExposeResetLink()
-        ? this.buildPasswordResetLink(email, token)
-        : undefined,
+      emailSent,
+      resetLink: this.shouldExposeResetLink() ? resetLink : undefined,
       expiresAt: passwordResetExpiresAt.toISOString(),
     };
   }

@@ -68,112 +68,125 @@ enum TestimonialStatus {
   REJECTED
 }
 
+enum SupportTicketStatus {
+  OPEN
+  PENDING_USER
+  RESOLVED
+}
+
+enum SupportTicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
 model User {
-  id             String         @id @default(cuid())
-  fullName       String
-  email          String         @unique
-  passwordHash   String
-  refreshTokenHash String?
-  refreshTokenExpiresAt DateTime?
+  id                     String          @id @default(cuid())
+  fullName               String
+  email                  String          @unique
+  passwordHash           String
+  refreshTokenHash       String?
+  refreshTokenExpiresAt  DateTime?
   passwordResetTokenHash String?
   passwordResetExpiresAt DateTime?
-  role           UserRole       @default(USER)
-  status         UserStatus     @default(ACTIVE)
-  profileImageUrl String?
-  kycStatus      KycStatus      @default(NOT_SUBMITTED)
-  kycDocumentType String?
-  kycDocumentUrl String?
-  kycAdminNote   String?
-  kycSubmittedAt DateTime?
-  kycReviewedAt  DateTime?
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-  wallet         Wallet?
-  transactions   Transaction[]
-  notifications  Notification[]
-  buy4meOrders   Buy4MeOrder[]
-  auditLogs      AuditLog[]     @relation("AuditActor")
+  role                   UserRole        @default(USER)
+  status                 UserStatus      @default(ACTIVE)
+  profileImageUrl        String?
+  kycStatus              KycStatus       @default(NOT_SUBMITTED)
+  kycDocumentType        String?
+  kycDocumentUrl         String?
+  kycAdminNote           String?
+  kycSubmittedAt         DateTime?
+  kycReviewedAt          DateTime?
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  wallet                 Wallet?
+  transactions           Transaction[]
+  notifications          Notification[]
+  buy4meOrders           Buy4MeOrder[]
+  supportTickets         SupportTicket[]
+  auditLogs              AuditLog[]      @relation("AuditActor")
 }
 
 model Wallet {
-  id             String         @id @default(cuid())
-  userId         String         @unique
-  availableNgn   Decimal        @db.Decimal(18, 2)
-  availableUsd   Decimal        @db.Decimal(18, 2)
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-  user           User           @relation(fields: [userId], references: [id])
-  credits        WalletCredit[]
+  id           String         @id @default(cuid())
+  userId       String         @unique
+  availableNgn Decimal        @db.Decimal(18, 2)
+  availableUsd Decimal        @db.Decimal(18, 2)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  user         User           @relation(fields: [userId], references: [id])
+  credits      WalletCredit[]
 }
 
 model WalletCredit {
   id             String           @id @default(cuid())
-  walletId        String
-  amount          Decimal          @db.Decimal(18, 2)
-  currency        Currency
-  type            WalletCreditType
-  expiresAt       DateTime
-  consumedAmount  Decimal          @default(0) @db.Decimal(18, 2)
-  createdAt       DateTime         @default(now())
-  wallet          Wallet           @relation(fields: [walletId], references: [id])
+  walletId       String
+  amount         Decimal          @db.Decimal(18, 2)
+  currency       Currency
+  type           WalletCreditType
+  expiresAt      DateTime
+  consumedAmount Decimal          @default(0) @db.Decimal(18, 2)
+  createdAt      DateTime         @default(now())
+  wallet         Wallet           @relation(fields: [walletId], references: [id])
 }
 
 model Transaction {
-  id                   String             @id @default(cuid())
-  userId               String
-  type                 TransactionType
-  service              String
-  amount               Decimal            @db.Decimal(18, 2)
-  currency             Currency
-  nairaEquivalent      Decimal            @db.Decimal(18, 2)
-  status               TransactionStatus  @default(PENDING)
-  reference            String?
-  proofOfPaymentUrl    String?
-  destinationDetails   Json?
-  adminActionHistory   Json?
-  createdAt            DateTime           @default(now())
-  updatedAt            DateTime           @updatedAt
-  user                 User               @relation(fields: [userId], references: [id])
+  id                 String            @id @default(cuid())
+  userId             String
+  type               TransactionType
+  service            String
+  amount             Decimal           @db.Decimal(18, 2)
+  currency           Currency
+  nairaEquivalent    Decimal           @db.Decimal(18, 2)
+  status             TransactionStatus @default(PENDING)
+  reference          String?
+  proofOfPaymentUrl  String?
+  destinationDetails Json?
+  adminActionHistory Json?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  user               User              @relation(fields: [userId], references: [id])
 }
 
 model Buy4MeOrder {
-  id              String        @id @default(cuid())
-  userId          String
-  productLink     String
-  productDetails  String
-  productCost     Decimal?      @db.Decimal(18, 2)
-  shippingCost    Decimal?      @db.Decimal(18, 2)
-  serviceCharge   Decimal?      @db.Decimal(18, 2)
-  totalCost       Decimal?      @db.Decimal(18, 2)
-  paymentMethod   String?
+  id                String       @id @default(cuid())
+  userId            String
+  productLink       String
+  productDetails    String
+  productCost       Decimal?     @db.Decimal(18, 2)
+  shippingCost      Decimal?     @db.Decimal(18, 2)
+  serviceCharge     Decimal?     @db.Decimal(18, 2)
+  totalCost         Decimal?     @db.Decimal(18, 2)
+  paymentMethod     String?
   proofOfPaymentUrl String?
-  timelineUpdate  String?
-  adminNote       String?
-  status          Buy4MeStatus  @default(PROCESSING)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  user            User          @relation(fields: [userId], references: [id])
+  timelineUpdate    String?
+  adminNote         String?
+  status            Buy4MeStatus @default(PROCESSING)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  user              User         @relation(fields: [userId], references: [id])
 }
 
 model Notification {
-  id          String    @id @default(cuid())
-  userId      String
-  title       String
-  message     String
-  readAt      DateTime?
-  createdAt   DateTime  @default(now())
-  user        User      @relation(fields: [userId], references: [id])
+  id        String    @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id])
 }
 
 model AuditLog {
-  id          String    @id @default(cuid())
-  actorId     String
-  action      String
-  entityType  String
-  entityId    String
-  metadata    Json?
-  createdAt   DateTime  @default(now())
-  actor       User      @relation("AuditActor", fields: [actorId], references: [id])
+  id         String   @id @default(cuid())
+  actorId    String
+  action     String
+  entityType String
+  entityId   String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+  actor      User     @relation("AuditActor", fields: [actorId], references: [id])
 }
 
 model ExchangeRate {
@@ -195,4 +208,26 @@ model Testimonial {
   submittedAt DateTime          @default(now())
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
+}
+
+model SupportTicket {
+  id         String                @id @default(cuid())
+  userId     String?
+  name       String
+  email      String
+  subject    String
+  topic      String
+  message    String
+  status     SupportTicketStatus   @default(OPEN)
+  priority   SupportTicketPriority @default(MEDIUM)
+  owner      String                @default("Unassigned")
+  channel    String                @default("Website")
+  createdAt  DateTime              @default(now())
+  updatedAt  DateTime              @updatedAt
+  resolvedAt DateTime?
+  user       User?                 @relation(fields: [userId], references: [id])
+
+  @@index([status])
+  @@index([email])
+  @@index([createdAt])
 }

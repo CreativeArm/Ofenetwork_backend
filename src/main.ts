@@ -70,6 +70,28 @@ async function bootstrap() {
     }),
   );
   app.use(
+    "/api/auth/forgot-password",
+    buildRateLimiter({
+      windowMs: 15 * 60 * 1000,
+      max: 6,
+      message: {
+        message: "Too many password reset requests. Please try again shortly.",
+      },
+      prefix: "rl:auth:forgot-password:",
+    }),
+  );
+  app.use(
+    "/api/auth/reset-password",
+    buildRateLimiter({
+      windowMs: 15 * 60 * 1000,
+      max: 10,
+      message: {
+        message: "Too many password reset attempts. Please try again shortly.",
+      },
+      prefix: "rl:auth:reset-password:",
+    }),
+  );
+  app.use(
     "/api/auth/refresh",
     buildRateLimiter({
       windowMs: 15 * 60 * 1000,
@@ -78,6 +100,17 @@ async function bootstrap() {
         message: "Too many session refresh attempts. Please try again shortly.",
       },
       prefix: "rl:auth:refresh:",
+    }),
+  );
+  app.use(
+    "/api/support/tickets",
+    buildRateLimiter({
+      windowMs: 15 * 60 * 1000,
+      max: 80,
+      message: {
+        message: "Too many support requests. Please try again shortly.",
+      },
+      prefix: "rl:support:tickets:",
     }),
   );
   app.use(
