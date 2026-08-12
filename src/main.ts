@@ -4,13 +4,35 @@ import { NestExpressApplication } from "@nestjs/platform-express";
 import rateLimit from "express-rate-limit";
 import { type RedisReply, RedisStore } from "rate-limit-redis";
 import { AppModule } from "./app.module";
+import { EmailService } from "./infrastructure/email/email.service";
 import { RedisService } from "./infrastructure/redis/redis.service";
 
+function getAllowedOrigins() {
+  const configuredOrigins = process.env.CORS_ORIGIN ?? process.env.FRONTEND_URL ?? "";
+  const origins = configuredOrigins
+    .split(",")
+    .map((origin) => origin.trim().replace(/\/$/, ""))
+    .filter(Boolean);
+
+  if (process.env.NODE_ENV === "production" && origins.length === 0) {
+    throw new Error("Set CORS_ORIGIN or FRONTEND_URL before starting in production.");
+  }
+
+  return origins;
+}
+
 async function bootstrap() {
+  const allowedOrigins = getAllowedOrigins();
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bodyParser: false,
   });
   const redisService = app.get(RedisService);
+  const emailService = app.get(EmailService);
+
+  if (process.env.NODE_ENV === "production") {
+    emailService.assertConfigured();
+  }
+
   const redisClient = await redisService.getClient();
 
   const buildRateLimiter = (config: {
@@ -38,7 +60,14 @@ async function bootstrap() {
   app.useBodyParser("json", { limit: "15mb" });
   app.useBodyParser("urlencoded", { limit: "15mb", extended: true });
   app.enableCors({
-    origin: true,
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin.replace(/\/$/, ""))) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error("Origin is not allowed by CORS."));
+    },
     credentials: true,
   });
   app.useGlobalPipes(

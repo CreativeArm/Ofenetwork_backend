@@ -14,7 +14,7 @@ const DEFAULT_RATES = [
   { service: "Crypto (USDT TRC20)", depositRate: "N1,580.00 / $1", withdrawalRate: "N1,680.00 / $1" },
   { service: "Skrill", depositRate: "N1,640.00 / $1", withdrawalRate: "N1,700.00 / $1" },
   { service: "PayPal", depositRate: "N1,650.00 / $1", withdrawalRate: "N1,720.00 / $1" },
-  { service: "Venmo", depositRate: "N1,640.00 / $1", withdrawalRate: "N1,700.00 / $1" },
+  { service: "Zelle", depositRate: "N1,640.00 / $1", withdrawalRate: "N1,700.00 / $1" },
   { service: "Payoneer", depositRate: "N1,645.00 / $1", withdrawalRate: "N1,710.00 / $1" },
   { service: "Buy 4 Me", depositRate: "Custom Quote", withdrawalRate: "Custom Quote" },
 ] as const;
@@ -46,19 +46,18 @@ export class RatesService {
   }
 
   private async ensureSeeded() {
-    const count = await this.prisma.exchangeRate.count();
-    if (count > 0) {
-      return;
-    }
-
-    await this.prisma.exchangeRate.createMany({
-      data: DEFAULT_RATES.map((rate, index) => ({
-        service: rate.service,
-        depositRate: rate.depositRate,
-        withdrawalRate: rate.withdrawalRate,
-        sortOrder: index,
+    await Promise.all(
+      DEFAULT_RATES.map((rate, index) => this.prisma.exchangeRate.upsert({
+        where: { service: rate.service },
+        update: {},
+        create: {
+          service: rate.service,
+          depositRate: rate.depositRate,
+          withdrawalRate: rate.withdrawalRate,
+          sortOrder: index,
+        },
       })),
-    });
+    );
   }
 
   async list() {

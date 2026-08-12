@@ -28,6 +28,8 @@ import { RatesService } from "./modules/rates/rates.service";
 import { TestimonialsService } from "./modules/testimonials/testimonials.service";
 import { KycService } from "./modules/kyc/kyc.service";
 import { SupportService } from "./modules/support/support.service";
+import { PaymentMethodsController } from "./modules/payment-methods/payment-methods.controller";
+import { PaymentMethodsService } from "./modules/payment-methods/payment-methods.service";
 
 @Module({
   imports: [JwtModule.register({})],
@@ -44,6 +46,7 @@ import { SupportService } from "./modules/support/support.service";
     WalletController,
     KycController,
     SupportController,
+    PaymentMethodsController,
   ],
   providers: [
     AppService,
@@ -62,6 +65,7 @@ import { SupportService } from "./modules/support/support.service";
     TestimonialsService,
     KycService,
     SupportService,
+    PaymentMethodsService,
   ],
 })
 export class AppModule {}

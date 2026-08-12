@@ -48,6 +48,19 @@ interface OAuthProfile {
   name?: string;
 }
 
+function getJwtSecret(name: "JWT_ACCESS_SECRET" | "JWT_REFRESH_SECRET", fallback: string) {
+  const secret = process.env[name]?.trim();
+  if (secret) {
+    return secret;
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(`${name} must be configured in production.`);
+  }
+
+  return fallback;
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -60,10 +73,14 @@ export class AuthService {
 
   private readonly accessTokenTtl = "15m";
   private readonly refreshTokenTtl = "7d";
-  private readonly accessTokenSecret =
-    process.env.JWT_ACCESS_SECRET ?? "dev-access-secret-change-me";
-  private readonly refreshTokenSecret =
-    process.env.JWT_REFRESH_SECRET ?? "dev-refresh-secret-change-me";
+  private readonly accessTokenSecret = getJwtSecret(
+    "JWT_ACCESS_SECRET",
+    "dev-access-secret-change-me",
+  );
+  private readonly refreshTokenSecret = getJwtSecret(
+    "JWT_REFRESH_SECRET",
+    "dev-refresh-secret-change-me",
+  );
   private readonly oauthStateTtlSeconds = 10 * 60;
   private readonly oauthSessionTtlSeconds = 2 * 60;
   private readonly oauthFetchTimeoutMs = 12_000;
@@ -139,6 +156,18 @@ export class AuthService {
       clientSecret,
       redirectUri,
     };
+  }
+
+  private getFacebookGraphApiVersion() {
+    const version = process.env.FACEBOOK_GRAPH_API_VERSION?.trim() ?? "v22.0";
+
+    if (!/^v\d+\.\d+$/.test(version)) {
+      throw new BadRequestException(
+        "FACEBOOK_GRAPH_API_VERSION must look like v22.0.",
+      );
+    }
+
+    return version;
   }
 
   private cleanupExpiredOAuthStates() {
@@ -397,7 +426,10 @@ export class AuthService {
     code: string,
     config: OAuthProviderConfig,
   ): Promise<OAuthProfile> {
-    const tokenUrl = new URL("https://graph.facebook.com/v19.0/oauth/access_token");
+    const graphApiVersion = this.getFacebookGraphApiVersion();
+    const tokenUrl = new URL(
+      `https://graph.facebook.com/${graphApiVersion}/oauth/access_token`,
+    );
     tokenUrl.searchParams.set("client_id", config.clientId);
     tokenUrl.searchParams.set("client_secret", config.clientSecret);
     tokenUrl.searchParams.set("redirect_uri", config.redirectUri);
@@ -417,7 +449,9 @@ export class AuthService {
       throw new BadRequestException("Facebook did not return an access token.");
     }
 
-    const profileUrl = new URL("https://graph.facebook.com/me");
+    const profileUrl = new URL(
+      `https://graph.facebook.com/${graphApiVersion}/me`,
+    );
     profileUrl.searchParams.set("fields", "id,name,email");
     profileUrl.searchParams.set("access_token", tokenData.access_token);
 
@@ -639,14 +673,10 @@ export class AuthService {
     const email = payload.email.trim().toLowerCase();
     const genericResponse: {
       message: string;
-      emailDeliveryConfigured: boolean;
-      emailSent?: boolean;
       resetLink?: string;
-      expiresAt?: string;
     } = {
       message:
-        "If an account exists for this email, password reset instructions are ready.",
-      emailDeliveryConfigured: this.emailService.isConfigured(),
+        "If an account exists for this email, password reset instructions will be sent shortly.",
     };
 
     const user = await this.prisma.user.findUnique({
@@ -672,7 +702,7 @@ export class AuthService {
     });
 
     const resetLink = this.buildPasswordResetLink(email, token);
-    const emailSent = await this.emailService.sendPasswordResetEmail({
+    await this.emailService.sendPasswordResetEmail({
       to: user.email,
       name: user.fullName,
       resetLink,
@@ -681,9 +711,7 @@ export class AuthService {
 
     return {
       ...genericResponse,
-      emailSent,
       resetLink: this.shouldExposeResetLink() ? resetLink : undefined,
-      expiresAt: passwordResetExpiresAt.toISOString(),
     };
   }
 
@@ -808,7 +836,10 @@ export class AuthService {
       return url.toString();
     }
 
-    const url = new URL("https://www.facebook.com/v19.0/dialog/oauth");
+    const graphApiVersion = this.getFacebookGraphApiVersion();
+    const url = new URL(
+      `https://www.facebook.com/${graphApiVersion}/dialog/oauth`,
+    );
     url.searchParams.set("client_id", config.clientId);
     url.searchParams.set("redirect_uri", config.redirectUri);
     url.searchParams.set("response_type", "code");

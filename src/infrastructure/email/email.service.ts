@@ -60,6 +60,12 @@ export class EmailService {
     return this.getSmtpConfig() !== null;
   }
 
+  assertConfigured() {
+    if (!this.isConfigured()) {
+      throw new Error("SMTP_HOST must be configured in production.");
+    }
+  }
+
   async sendPasswordResetEmail(input: PasswordResetEmailInput) {
     const config = this.getSmtpConfig();
 
