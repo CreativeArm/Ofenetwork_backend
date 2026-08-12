@@ -109,25 +109,49 @@ export class RatesService {
   }
 
   async update(id: string, payload: UpdateRateDto) {
-    const current = await this.prisma.exchangeRate.findUnique({
+    let current = await this.prisma.exchangeRate.findUnique({
       where: { id },
     });
+
+    const service = payload.service?.trim();
+
+    if (!current && service) {
+      current = await this.prisma.exchangeRate.findUnique({
+        where: { service },
+      });
+    }
+
     if (!current) {
+      const depositRate = payload.depositRate?.trim();
+      const withdrawalRate = payload.withdrawalRate?.trim();
+
+      if (service && depositRate && withdrawalRate) {
+        const created = await this.prisma.exchangeRate.create({
+          data: {
+            service,
+            depositRate,
+            withdrawalRate,
+            sortOrder: payload.sortOrder ?? 0,
+          },
+        });
+        await this.clearRateCache();
+        return this.serializeRate(created);
+      }
+
       throw new NotFoundException("Rate not found.");
     }
 
-    const service = payload.service?.trim();
     if (service && service !== current.service) {
       const existing = await this.prisma.exchangeRate.findUnique({
         where: { service },
       });
-      if (existing) {
+      if (existing && existing.id !== current.id) {
         throw new ConflictException("A rate already exists for this service.");
       }
     }
 
     const rate = await this.prisma.exchangeRate.update({
-      where: { id },
+      where: { id: current.id },
       data: {
         service: service ?? current.service,
         depositRate: payload.depositRate?.trim() ?? current.depositRate,
@@ -141,15 +165,16 @@ export class RatesService {
   }
 
   async remove(id: string) {
-    const current = await this.prisma.exchangeRate.findUnique({
+    let current = await this.prisma.exchangeRate.findUnique({
       where: { id },
     });
+
     if (!current) {
-      throw new NotFoundException("Rate not found.");
+      return { success: true };
     }
 
     await this.prisma.exchangeRate.delete({
-      where: { id },
+      where: { id: current.id },
     });
 
     await this.clearRateCache();
