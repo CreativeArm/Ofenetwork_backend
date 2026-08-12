@@ -14,8 +14,8 @@ function getAllowedOrigins() {
     .map((origin) => origin.trim().replace(/\/$/, ""))
     .filter(Boolean);
 
-  if (process.env.NODE_ENV === "production" && origins.length === 0) {
-    throw new Error("Set CORS_ORIGIN or FRONTEND_URL before starting in production.");
+  if (origins.length === 0) {
+    return ["*"];
   }
 
   return origins;
@@ -29,8 +29,8 @@ async function bootstrap() {
   const redisService = app.get(RedisService);
   const emailService = app.get(EmailService);
 
-  if (process.env.NODE_ENV === "production") {
-    emailService.assertConfigured();
+  if (!emailService.isConfigured()) {
+    console.warn("WARNING: SMTP_HOST is not configured. Email notifications will be skipped.");
   }
 
   const redisClient = await redisService.getClient();
@@ -61,7 +61,7 @@ async function bootstrap() {
   app.useBodyParser("urlencoded", { limit: "15mb", extended: true });
   app.enableCors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin.replace(/\/$/, ""))) {
+      if (!origin || allowedOrigins.includes("*") || allowedOrigins.includes(origin.replace(/\/$/, ""))) {
         callback(null, true);
         return;
       }

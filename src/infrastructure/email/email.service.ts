@@ -62,7 +62,7 @@ export class EmailService {
 
   assertConfigured() {
     if (!this.isConfigured()) {
-      throw new Error("SMTP_HOST must be configured in production.");
+      this.logger.warn("SMTP_HOST is not configured. Email notifications will be skipped.");
     }
   }
 
