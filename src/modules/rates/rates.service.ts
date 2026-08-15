@@ -46,11 +46,14 @@ export class RatesService {
   }
 
   private async ensureSeeded() {
+    const count = await this.prisma.exchangeRate.count();
+    if (count > 0) {
+      return;
+    }
+
     await Promise.all(
-      DEFAULT_RATES.map((rate, index) => this.prisma.exchangeRate.upsert({
-        where: { service: rate.service },
-        update: {},
-        create: {
+      DEFAULT_RATES.map((rate, index) => this.prisma.exchangeRate.create({
+        data: {
           service: rate.service,
           depositRate: rate.depositRate,
           withdrawalRate: rate.withdrawalRate,
