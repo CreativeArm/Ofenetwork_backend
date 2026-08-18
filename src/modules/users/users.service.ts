@@ -97,16 +97,18 @@ export class UsersService {
     return this.serializeUser(user);
   }
 
-  async search(query: string) {
-    const normalized = query.trim();
+  async search(query?: string) {
+    const normalized = (query || "").trim();
     const users = await this.prisma.user.findMany({
-      where: {
-        OR: [
-          { id: { contains: normalized, mode: "insensitive" } },
-          { email: { contains: normalized, mode: "insensitive" } },
-          { fullName: { contains: normalized, mode: "insensitive" } },
-        ],
-      },
+      where: normalized
+        ? {
+            OR: [
+              { id: { contains: normalized, mode: "insensitive" } },
+              { email: { contains: normalized, mode: "insensitive" } },
+              { fullName: { contains: normalized, mode: "insensitive" } },
+            ],
+          }
+        : undefined,
       select: this.userSelect,
       orderBy: { createdAt: "desc" },
     });

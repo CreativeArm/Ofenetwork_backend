@@ -352,15 +352,15 @@ export class AdminService {
     return wallet;
   }
 
-  async searchUsers(query: string) {
-    const normalizedQuery = query.trim().toLowerCase();
+  async searchUsers(query?: string) {
+    const normalizedQuery = (query || "").trim().toLowerCase();
     const cacheKey = `admin:user-search:${normalizedQuery}`;
     const cachedUsers = await this.redis.getJson<unknown[]>(cacheKey);
     if (cachedUsers) {
       return cachedUsers;
     }
 
-    const users = (await this.usersService.search(query)).filter(
+    const users = (await this.usersService.search(normalizedQuery)).filter(
       (user) => user.role === "USER",
     );
 

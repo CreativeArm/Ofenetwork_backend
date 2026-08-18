@@ -11,7 +11,7 @@ export class AdminController {
   }
 
   @Get("search-users")
-  searchUsers(@Query("query") query: string) {
+  searchUsers(@Query("query") query?: string) {
     return this.adminService.searchUsers(query);
   }
 
