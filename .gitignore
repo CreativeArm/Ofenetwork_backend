@@ -1,14 +1,58 @@
+# Dependencies
 node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+.next/
+out/
 dist/
+build/
+
+# Environment variables
 .env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.production
 .env.*
 !.env.example
 !.env.production.example
-*.log
-*.err.log
-.DS_Store
-Thumbs.db
+
+# Logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
+*.log
+*.err.log
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage
+coverage/
+.nyc_output/
+
+# Prisma
 .prisma/
+
+# Misc
+.DS_Store
+Thumbs.db
+*.tsbuildinfo
+.eslintcache
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+ehthumbs.db
+Desktop.ini
