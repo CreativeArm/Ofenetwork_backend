@@ -1,39 +1,19 @@
+"use client";
+
+import { use } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import {
-  AdminBuy4MeQueue,
-  type AdminBuy4MeOrderRecord,
-} from "../../../components/admin-buy4me-queue";
-import { AdminKycQueue, type KycRecord } from "../../../components/admin-kyc-queue";
+import { AdminBuy4MeQueue } from "../../../components/admin-buy4me-queue";
+import { AdminKycQueue } from "../../../components/admin-kyc-queue";
 import { AdminNotificationCenter } from "../../../components/admin-notification-center";
 import { AdminPaymentMethodsManager } from "../../../components/admin-payment-methods-manager";
 import { AdminRatesEditor } from "../../../components/admin-rates-editor";
-import {
-  AdminSupportQueue,
-  type TicketRecord,
-} from "../../../components/admin-support-queue";
-import {
-  AdminTestimonialsQueue,
-  type TestimonialRecord,
-} from "../../../components/admin-testimonials-queue";
+import { AdminSupportQueue } from "../../../components/admin-support-queue";
+import { AdminTestimonialsQueue } from "../../../components/admin-testimonials-queue";
 import { AdminUsersBonusManager } from "../../../components/admin-users-bonus-manager";
 import { AppShell } from "../../../components/shell";
-import {
-  AdminTransactionsQueue,
-  type AdminTransactionRecord,
-  type TransactionStatus,
-} from "../../../components/admin-transactions-queue";
+import { AdminTransactionsQueue } from "../../../components/admin-transactions-queue";
 import { AdminCard, AdminSectionIntro, AdminStatusBadge } from "../../../components/admin-ui";
-import {
-  buildProofPlaceholder,
-  fetchAdminBuy4MeOrders,
-  fetchAdminTransactions,
-  fetchAdminUsers,
-  fetchSupportTickets,
-  fetchTestimonials,
-  formatCurrency,
-  formatRelativeTime,
-} from "../../../lib/admin-backend";
 import {
   adminBonusRules,
   adminNotificationsData,
@@ -44,16 +24,31 @@ import {
   adminSettingsData,
   type AdminSectionSlug,
 } from "../../../lib/admin-data";
-import { getPrimaryTransactionDetail } from "../../../lib/transaction-details";
 
 const sections = Object.keys(adminSectionMeta) as AdminSectionSlug[];
 
 function toneForStatus(status: string) {
   const lower = status.toLowerCase();
-  if (lower.includes("confirm") || lower.includes("approved") || lower.includes("live") || lower.includes("active") || lower.includes("successful") || lower.includes("resolved") || lower.includes("primary") || lower.includes("vip")) {
+  if (
+    lower.includes("confirm") ||
+    lower.includes("approved") ||
+    lower.includes("live") ||
+    lower.includes("active") ||
+    lower.includes("successful") ||
+    lower.includes("resolved") ||
+    lower.includes("primary") ||
+    lower.includes("vip")
+  ) {
     return "success" as const;
   }
-  if (lower.includes("pending") || lower.includes("watch") || lower.includes("scheduled") || lower.includes("review") || lower.includes("awaiting") || lower.includes("medium")) {
+  if (
+    lower.includes("pending") ||
+    lower.includes("watch") ||
+    lower.includes("scheduled") ||
+    lower.includes("review") ||
+    lower.includes("awaiting") ||
+    lower.includes("medium")
+  ) {
     return "warning" as const;
   }
   if (lower.includes("reject") || lower.includes("flagged") || lower.includes("blocked")) {
@@ -65,18 +60,14 @@ function toneForStatus(status: string) {
   return "neutral" as const;
 }
 
-export function generateStaticParams() {
-  return sections.map((section) => ({
-    section,
-  }));
-}
-
-export default async function AdminSectionPage({
+export default function AdminSectionPage({
   params,
 }: {
   params: Promise<{ section: string }>;
 }) {
-  const { section } = await params;
+  const resolvedParams = use(params);
+  const section = resolvedParams.section;
+
   if (!sections.includes(section as AdminSectionSlug)) {
     notFound();
   }
@@ -87,67 +78,19 @@ export default async function AdminSectionPage({
     <AppShell admin activeSlug={section} title={meta.title} subtitle={meta.subtitle}>
       <section className="space-y-6">
         <AdminSectionIntro eyebrow={meta.eyebrow} title={meta.title} description={meta.description} />
-        {await renderSection(section as AdminSectionSlug)}
+        {renderSection(section as AdminSectionSlug)}
       </section>
     </AppShell>
   );
 }
 
-async function renderSection(section: AdminSectionSlug) {
+function renderSection(section: AdminSectionSlug) {
   switch (section) {
     case "transactions":
-      const [transactions, users] = await Promise.all([
-        fetchAdminTransactions().catch(() => []),
-        fetchAdminUsers().catch(() => []),
-      ]);
-
-      const transactionItems: readonly AdminTransactionRecord[] =
-        transactions.length > 0
-          ? transactions.map((item) => {
-              const user = users.find((entry) => entry.id === item.userId);
-              const amount = formatCurrency(item.nairaEquivalent);
-              const proofHref =
-                item.proofOfPaymentUrl ??
-                buildProofPlaceholder(item.id, item.service, amount);
-              const primaryDetail = getPrimaryTransactionDetail(item);
-
-              return {
-                id: item.id,
-                user: item.userFullName ?? user?.fullName ?? "Unknown user",
-                userEmail: item.userEmail ?? user?.email,
-                service: item.service,
-                type:
-                  item.type === "DEPOSIT"
-                    ? "Deposit"
-                    : item.type === "WITHDRAWAL"
-                      ? "Withdrawal"
-                      : item.type,
-                amount,
-                status: (
-                  item.status === "CONFIRMED"
-                    ? "Confirmed"
-                    : item.status === "REJECTED"
-                      ? "Rejected"
-                      : "Pending"
-                ) as TransactionStatus,
-                time: formatRelativeTime(item.createdAt),
-                paymentReference: primaryDetail?.value ?? "No submitted detail",
-                paymentReferenceLabel: primaryDetail?.label ?? "Submitted Detail",
-                proofName: `${item.id}-proof.svg`,
-                proofHref,
-                bonusWithdrawalRequested:
-                  item.destinationDetails?.bonusWithdrawalRequested === "Yes" ||
-                  item.destinationDetails?.bonusCashout === "Yes",
-                destinationDetails: item.destinationDetails,
-                adminActionHistory: item.adminActionHistory,
-              };
-            })
-          : [];
-
       return (
         <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
           <AdminCard>
-            <AdminTransactionsQueue items={transactionItems} />
+            <AdminTransactionsQueue />
           </AdminCard>
           <div className="space-y-6">
             <AdminCard>
@@ -161,33 +104,28 @@ async function renderSection(section: AdminSectionSlug) {
             <AdminCard>
               <h3 className="text-xl font-semibold">Fast Links</h3>
               <div className="mt-4 grid gap-3">
-                <Link href="/admin/rates" className="rounded-2xl border border-[#e5ebe7] px-4 py-3 text-sm font-semibold text-slate-700 hover:text-[#0f7b36]">Update rates</Link>
-                <Link href="/admin/notifications" className="rounded-2xl border border-[#e5ebe7] px-4 py-3 text-sm font-semibold text-slate-700 hover:text-[#0f7b36]">Send transaction notice</Link>
+                <Link
+                  href="/admin/rates"
+                  className="rounded-2xl border border-[#e5ebe7] px-4 py-3 text-sm font-semibold text-slate-700 hover:text-[#0f7b36]"
+                >
+                  Update rates
+                </Link>
+                <Link
+                  href="/admin/notifications"
+                  className="rounded-2xl border border-[#e5ebe7] px-4 py-3 text-sm font-semibold text-slate-700 hover:text-[#0f7b36]"
+                >
+                  Send transaction notice
+                </Link>
               </div>
             </AdminCard>
           </div>
         </div>
       );
     case "buy4me":
-      const [buy4meOrders, buy4meUsers] = await Promise.all([
-        fetchAdminBuy4MeOrders().catch(() => []),
-        fetchAdminUsers().catch(() => []),
-      ]);
-
-      const buy4meItems: readonly AdminBuy4MeOrderRecord[] =
-        buy4meOrders.length > 0
-          ? buy4meOrders.map((order) => ({
-              ...order,
-              customer:
-                buy4meUsers.find((user) => user.id === order.userId)?.fullName ??
-                "Unknown user",
-            }))
-          : [];
-
       return (
         <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
           <AdminCard>
-            <AdminBuy4MeQueue items={buy4meItems} />
+            <AdminBuy4MeQueue />
           </AdminCard>
           <AdminCard>
             <h3 className="text-xl font-semibold">Fulfilment Notes</h3>
@@ -200,11 +138,9 @@ async function renderSection(section: AdminSectionSlug) {
         </div>
       );
     case "users":
-      const adminUsers = await fetchAdminUsers().catch(() => []);
-
       return (
         <AdminCard>
-          <AdminUsersBonusManager users={adminUsers} />
+          <AdminUsersBonusManager />
         </AdminCard>
       );
     case "bonuses":
@@ -264,61 +200,15 @@ async function renderSection(section: AdminSectionSlug) {
         </AdminCard>
       );
     case "testimonials":
-      const liveTestimonials = await fetchTestimonials().catch(() => []);
-      const testimonialItems: readonly TestimonialRecord[] =
-        liveTestimonials.length > 0
-          ? liveTestimonials.map((item) => ({
-              id: item.id,
-              name: item.name,
-              service: item.service,
-              text: item.text,
-              status: item.status,
-              submittedAt: formatRelativeTime(item.submittedAt),
-            }))
-          : [];
-
       return (
         <AdminCard>
-          <AdminTestimonialsQueue items={testimonialItems} />
+          <AdminTestimonialsQueue />
         </AdminCard>
       );
     case "tickets":
-      const supportTickets = await fetchSupportTickets().catch(() => []);
-      const supportTicketItems: readonly TicketRecord[] =
-        supportTickets.length > 0
-          ? supportTickets.map((ticket) => ({
-              id: ticket.id,
-              subject: ticket.subject,
-              user: `${ticket.name} • ${ticket.email}`,
-              priority:
-                ticket.priority === "HIGH"
-                  ? "High"
-                  : ticket.priority === "LOW"
-                    ? "Low"
-                    : "Medium",
-              owner: ticket.owner,
-              status:
-                ticket.status === "PENDING_USER"
-                  ? "Pending User"
-                  : ticket.status === "RESOLVED"
-                    ? "Resolved"
-                    : "Open",
-              channel: ticket.channel,
-              updatedAt: formatRelativeTime(ticket.updatedAt),
-              summary: ticket.message,
-              conversation: ticket.conversation.map((message) => ({
-                ...message,
-                time: formatRelativeTime(message.time),
-              })),
-            }))
-          : [];
-
       return (
         <AdminCard>
-          <AdminSupportQueue
-            items={supportTicketItems}
-            liveMode={true}
-          />
+          <AdminSupportQueue liveMode={true} />
         </AdminCard>
       );
     case "notifications":
@@ -328,34 +218,9 @@ async function renderSection(section: AdminSectionSlug) {
         </AdminCard>
       );
     case "kyc":
-      const kycUsers = await fetchAdminUsers().catch(() => []);
-      const liveKycItems: readonly KycRecord[] = kycUsers
-        .filter((user) => user.kycStatus && user.kycStatus !== "NOT_SUBMITTED")
-        .map((user) => ({
-          id: `KYC-${user.id.slice(-8)}`,
-          userId: user.id,
-          user: user.fullName || "Unnamed User",
-          document: user.kycDocumentType ?? "KYC document",
-          risk: user.kycStatus === "REJECTED" ? "High" : "Low",
-          status:
-            user.kycStatus === "APPROVED"
-              ? "Approved"
-              : user.kycStatus === "REJECTED"
-                ? "Flagged"
-                : "Pending",
-          submittedAt: user.kycSubmittedAt
-            ? formatRelativeTime(user.kycSubmittedAt)
-            : "Not submitted",
-          proofName: `${user.id}-kyc-document`,
-          proofHref:
-            user.kycDocumentUrl ??
-            buildProofPlaceholder(user.id, user.kycDocumentType ?? "KYC", user.email),
-          notes: user.kycAdminNote ?? "Awaiting admin review.",
-        }));
-
       return (
         <AdminCard>
-          <AdminKycQueue items={liveKycItems} />
+          <AdminKycQueue />
         </AdminCard>
       );
     case "settings":
@@ -390,7 +255,10 @@ async function renderSection(section: AdminSectionSlug) {
           </div>
           <div className="space-y-3">
             {adminSecurityEvents.map((event) => (
-              <div key={event.event + event.time} className="grid gap-4 rounded-[22px] border border-[#edf1ee] p-4 md:grid-cols-[1fr_0.7fr_0.7fr_0.5fr] md:items-center">
+              <div
+                key={event.event + event.time}
+                className="grid gap-4 rounded-[22px] border border-[#edf1ee] p-4 md:grid-cols-[1fr_0.7fr_0.7fr_0.5fr] md:items-center"
+              >
                 <div>
                   <p className="font-semibold text-slate-900">{event.event}</p>
                   <p className="text-sm text-slate-500">{event.actor}</p>
