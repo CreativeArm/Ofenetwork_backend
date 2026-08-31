@@ -9,11 +9,9 @@ import {
   fetchAdminBuy4MeOrders,
   fetchAdminDashboardMetrics,
   fetchAdminTransactions,
-  fetchAdminUsers,
   formatCurrency,
   formatRelativeTime,
   getCachedApi,
-  type BackendAdminUser,
   type BackendBuy4MeOrder,
   type BackendDashboardMetrics,
   type BackendTransaction,
@@ -199,44 +197,37 @@ export function AdminDashboardWorkspace() {
   const [transactions, setTransactions] = useState<BackendTransaction[]>(
     () => getCachedApi<BackendTransaction[]>("/transactions") ?? [],
   );
-  const [users, setUsers] = useState<BackendAdminUser[]>(
-    () => getCachedApi<BackendAdminUser[]>("/admin/search-users?query=") ?? [],
-  );
   const [buy4meOrders, setBuy4meOrders] = useState<BackendBuy4MeOrder[]>(
     () => getCachedApi<BackendBuy4MeOrder[]>("/buy4me") ?? [],
   );
+  // isLoading is true only when there is zero cached data to show
   const [isLoading, setIsLoading] = useState(() => {
-    const cached = getCachedApi<BackendDashboardMetrics>("/admin/dashboard");
-    return !cached;
+    return !getCachedApi<BackendDashboardMetrics>("/admin/dashboard");
   });
 
   const loadData = async (silent = false) => {
+    // Fire ALL 4 requests in parallel — dashboard metrics + secondary data
     if (!silent && !dashboardData) setIsLoading(true);
     try {
-      const dashMetrics = await fetchAdminDashboardMetrics();
-      setDashboardData(dashMetrics);
-      if (!silent) setIsLoading(false);
-
-      // Non-blocking secondary loads
-      Promise.allSettled([
+      const [dashRes, txRes, b4mRes] = await Promise.allSettled([
+        fetchAdminDashboardMetrics(),
         fetchAdminTransactions(),
-        fetchAdminUsers(),
         fetchAdminBuy4MeOrders(),
-      ]).then(([txRes, usersRes, b4mRes]) => {
-        if (txRes.status === "fulfilled") setTransactions(txRes.value);
-        if (usersRes.status === "fulfilled") setUsers(usersRes.value);
-        if (b4mRes.status === "fulfilled") setBuy4meOrders(b4mRes.value);
-      });
+      ]);
+      if (dashRes.status === "fulfilled") setDashboardData(dashRes.value);
+      if (txRes.status === "fulfilled") setTransactions(txRes.value);
+      if (b4mRes.status === "fulfilled") setBuy4meOrders(b4mRes.value);
     } catch {
-      // Keep state
+      // Keep stale state
     } finally {
-      if (!silent) setIsLoading(false);
+      setIsLoading(false);
     }
   };
 
   useEffect(() => {
     loadData();
-    const interval = window.setInterval(() => loadData(true), 25000);
+    // Poll every 60s (was 25s) — dashboard metrics are now cached 5 min on backend
+    const interval = window.setInterval(() => loadData(true), 60_000);
     const onFocus = () => loadData(true);
     window.addEventListener("focus", onFocus);
     return () => {
@@ -284,7 +275,7 @@ export function AdminDashboardWorkspace() {
     buy4meStatusBreakdown.reduce((sum, item) => sum + item.value, 0);
   const pieGradient = buildPieGradient(buy4meStatusBreakdown);
 
-  const totalUsersCount = dashboardData?.totalUsers ?? users.length;
+  const totalUsersCount = dashboardData?.totalUsers ?? 0;
   const totalTransactionsCount = dashboardData?.totalTransactions ?? transactions.length;
   const totalDepositsVolume =
     dashboardData?.totalDeposits ??
@@ -297,9 +288,7 @@ export function AdminDashboardWorkspace() {
       .filter((t) => t.type === "WITHDRAWAL" && t.status === "CONFIRMED")
       .reduce((sum, t) => sum + (t.nairaEquivalent || 0), 0);
 
-  const verifiedUsersCount =
-    dashboardData?.verifiedUsers ??
-    users.filter((u) => u.kycStatus === "APPROVED").length;
+  const verifiedUsersCount = dashboardData?.verifiedUsers ?? 0;
   const pendingTransactionsCount =
     dashboardData?.pendingRequests ??
     transactions.filter((t) => t.status === "PENDING").length;
@@ -337,23 +326,29 @@ export function AdminDashboardWorkspace() {
     },
   ];
 
-  const recentTransactions = transactions.slice(0, 5).map((item) => {
-    const user = users.find((entry) => entry.id === item.userId);
-    const labelPrefix = item.type === "DEPOSIT" ? "Deposit from" : "Withdrawal to";
-
-    return {
-      id: item.id,
-      service: `${labelPrefix} ${user?.fullName ?? "Unknown user"}`,
-      meta: item.service,
-      amount: formatCurrency(item.nairaEquivalent),
-      status:
-        item.status === "CONFIRMED"
-          ? "Completed"
-          : item.status === "REJECTED"
-            ? "Rejected"
-            : "Pending",
-    };
-  });
+  // Use recentActivities from dashboard metrics (already fetched) instead of
+  // requiring the full transactions list — much faster first render.
+  const recentTransactions = dashboardData?.recentActivities?.length
+    ? dashboardData.recentActivities.slice(0, 5).map((entry) => ({
+        id: entry.id,
+        service: entry.action.replace(/_/g, " "),
+        meta: entry.entityType,
+        amount: "",
+        status: "Completed" as const,
+      }))
+    : transactions.slice(0, 5).map((item) => ({
+        id: item.id,
+        service: item.type === "DEPOSIT" ? `Deposit — ${item.service}` : `Withdrawal — ${item.service}`,
+        meta: item.service,
+        amount: formatCurrency(item.nairaEquivalent),
+        status: (
+          item.status === "CONFIRMED"
+            ? "Completed"
+            : item.status === "REJECTED"
+              ? "Rejected"
+              : "Pending"
+        ) as "Completed" | "Rejected" | "Pending",
+      }));
 
   const recentUsersData = dashboardData?.recentUsers?.length
     ? dashboardData.recentUsers.map((user) => ({
@@ -369,19 +364,7 @@ export function AdminDashboardWorkspace() {
                 : "Unverified",
         time: user.createdAt ? formatRelativeTime(user.createdAt) : "Recently",
       }))
-    : users.slice(0, 5).map((user) => ({
-        name: user.fullName || "Unnamed User",
-        email: user.email,
-        status:
-          user.kycStatus === "APPROVED"
-            ? "Verified"
-            : user.kycStatus === "PENDING"
-              ? "KYC Pending"
-              : user.kycStatus === "REJECTED"
-                ? "KYC Rejected"
-                : "Unverified",
-        time: user.createdAt ? formatRelativeTime(user.createdAt) : "Recently",
-      }));
+    : [];
 
   const pendingDeposits =
     dashboardData?.pendingDeposits ??
@@ -393,17 +376,13 @@ export function AdminDashboardWorkspace() {
     transactions.filter(
       (item) => item.type === "WITHDRAWAL" && item.status === "PENDING",
     ).length;
-  const pendingKycCount =
-    dashboardData?.pendingKycCount ??
-    users.filter((item) => item.kycStatus === "PENDING").length;
+  const pendingKycCount = dashboardData?.pendingKycCount ?? 0;
   const pendingBuy4MeCount =
     dashboardData?.pendingBuy4Me ??
     buy4meOrders.filter(
       (item) => item.status !== "COMPLETED" && item.status !== "CANCELLED",
     ).length;
-  const unverifiedUsersCount =
-    dashboardData?.unverifiedUsers ??
-    users.filter((item) => item.kycStatus !== "APPROVED").length;
+  const unverifiedUsersCount = dashboardData?.unverifiedUsers ?? 0;
 
   const liveSystemSummary = [
     { label: "Pending KYC Reviews", value: pendingKycCount, href: "/admin/kyc" },
@@ -721,7 +700,7 @@ export function AdminDashboardWorkspace() {
 
           <AdminCard>
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-xl font-semibold">Recent Users ({users.length})</h2>
+              <h2 className="text-xl font-semibold">Recent Users{dashboardData?.totalUsers ? ` (${dashboardData.totalUsers.toLocaleString()} total)` : ""}</h2>
               <Link href="/admin/users" className="text-sm font-semibold text-[#0f7b36] hover:underline">
                 View All
               </Link>

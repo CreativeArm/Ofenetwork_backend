@@ -353,7 +353,7 @@ export class AdminService {
       })),
     };
 
-    await this.redis.setJson(cacheKey, metrics, 30);
+    await this.redis.setJson(cacheKey, metrics, 300);
 
     return metrics;
   }
