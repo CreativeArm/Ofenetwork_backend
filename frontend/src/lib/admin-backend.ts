@@ -263,9 +263,13 @@ async function fetchApi<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
 
   const fetchPromise = (async () => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 15_000);
+
     try {
       const response = await fetch(`${API_BASE_URL}${path}`, {
         ...init,
+        signal: init.signal ?? controller.signal,
       });
 
       if (!response.ok) {
@@ -278,6 +282,7 @@ async function fetchApi<T>(path: string, init: RequestInit = {}): Promise<T> {
       }
       return data;
     } finally {
+      window.clearTimeout(timeout);
       if (isGet) {
         inFlightRequests.delete(path);
       }

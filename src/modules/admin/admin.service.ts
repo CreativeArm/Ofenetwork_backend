@@ -364,38 +364,76 @@ export class AdminService {
       (user) => user.role === "USER",
     );
 
-    const result = await Promise.all(
-      users.map(async (user) => {
-        const transactions = await this.prisma.transaction.findMany({
-          where: { userId: user.id },
-          orderBy: { createdAt: "desc" },
-        });
-
-        return {
-        ...user,
-        wallet: await this.walletService.getWallet(user.id),
-          transactions: transactions.map((transaction) => ({
-            id: transaction.id,
-            userId: transaction.userId,
-            type: transaction.type,
-            service: transaction.service,
-            amount: transaction.amount.toNumber(),
-            currency: transaction.currency,
-            nairaEquivalent: transaction.nairaEquivalent.toNumber(),
-            status: transaction.status,
-            reference: transaction.reference ?? undefined,
-            proofOfPaymentUrl: transaction.proofOfPaymentUrl ?? undefined,
-            destinationDetails:
-              (transaction.destinationDetails as Record<string, string> | null) ?? undefined,
-            adminActionHistory: Array.isArray(transaction.adminActionHistory)
-              ? transaction.adminActionHistory
-              : [],
-            createdAt: transaction.createdAt.toISOString(),
-            updatedAt: transaction.updatedAt.toISOString(),
-          })),
-        };
+    const userIds = users.map((u) => u.id);
+    const [allTransactions, allWallets] = await Promise.all([
+      this.prisma.transaction.findMany({
+        where: { userId: { in: userIds } },
+        orderBy: { createdAt: "desc" },
       }),
-    );
+      this.prisma.wallet.findMany({
+        where: { userId: { in: userIds } },
+        include: { credits: true },
+      }),
+    ]);
+
+    const txMap = new Map<string, typeof allTransactions>();
+    allTransactions.forEach((tx) => {
+      const list = txMap.get(tx.userId) ?? [];
+      list.push(tx);
+      txMap.set(tx.userId, list);
+    });
+
+    const walletMap = new Map(allWallets.map((w) => [w.userId, w]));
+
+    const result = users.map((user) => {
+      const userTxs = txMap.get(user.id) ?? [];
+      const userWallet = walletMap.get(user.id);
+
+      return {
+        ...user,
+        wallet: userWallet
+          ? {
+              userId: userWallet.userId,
+              balances: {
+                NGN: userWallet.availableNgn.toNumber(),
+                USD: userWallet.availableUsd.toNumber(),
+              },
+              credits: userWallet.credits.map((credit) => ({
+                id: credit.id,
+                amount: credit.amount.toNumber(),
+                currency: credit.currency,
+                type: credit.type,
+                expiresAt: credit.expiresAt.toISOString(),
+                consumedAmount: credit.consumedAmount.toNumber(),
+                createdAt: credit.createdAt.toISOString(),
+              })),
+            }
+          : {
+              userId: user.id,
+              balances: { NGN: 0, USD: 0 },
+              credits: [],
+            },
+        transactions: userTxs.map((transaction) => ({
+          id: transaction.id,
+          userId: transaction.userId,
+          type: transaction.type,
+          service: transaction.service,
+          amount: transaction.amount.toNumber(),
+          currency: transaction.currency,
+          nairaEquivalent: transaction.nairaEquivalent.toNumber(),
+          status: transaction.status,
+          reference: transaction.reference ?? undefined,
+          proofOfPaymentUrl: transaction.proofOfPaymentUrl ?? undefined,
+          destinationDetails:
+            (transaction.destinationDetails as Record<string, string> | null) ?? undefined,
+          adminActionHistory: Array.isArray(transaction.adminActionHistory)
+            ? transaction.adminActionHistory
+            : [],
+          createdAt: transaction.createdAt.toISOString(),
+          updatedAt: transaction.updatedAt.toISOString(),
+        })),
+      };
+    });
 
     await this.redis.setJson(cacheKey, result, 15);
 

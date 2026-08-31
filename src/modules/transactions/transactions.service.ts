@@ -52,10 +52,16 @@ export class TransactionsService {
     adminActionHistory: Prisma.JsonValue | null;
     createdAt: Date;
     updatedAt: Date;
+    user?: {
+      fullName: string;
+      email: string;
+    } | null;
   }) {
     return {
       id: transaction.id,
       userId: transaction.userId,
+      userFullName: transaction.user?.fullName ?? undefined,
+      userEmail: transaction.user?.email ?? undefined,
       type: transaction.type,
       service: transaction.service,
       amount: transaction.amount.toNumber(),
@@ -263,6 +269,14 @@ export class TransactionsService {
   async listForUser(userId: string) {
     const transactions = await this.prisma.transaction.findMany({
       where: { userId },
+      include: {
+        user: {
+          select: {
+            fullName: true,
+            email: true,
+          },
+        },
+      },
       orderBy: { createdAt: "desc" },
     });
 
@@ -271,6 +285,14 @@ export class TransactionsService {
 
   async listAll() {
     const transactions = await this.prisma.transaction.findMany({
+      include: {
+        user: {
+          select: {
+            fullName: true,
+            email: true,
+          },
+        },
+      },
       orderBy: { createdAt: "desc" },
     });
 

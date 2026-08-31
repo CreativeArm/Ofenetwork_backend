@@ -110,7 +110,7 @@ function getSubmittedDetails(transaction: AdminTransactionRecord) {
 
 function mapToAdminTransactionRecord(
   item: BackendTransaction,
-  users: BackendAdminUser[],
+  users: BackendAdminUser[] = [],
 ): AdminTransactionRecord {
   const user = users.find((entry) => entry.id === item.userId);
   const amount = formatCurrency(item.nairaEquivalent);
@@ -122,8 +122,8 @@ function mapToAdminTransactionRecord(
   return {
     id: item.id,
     userId: item.userId,
-    user: user?.fullName ?? "Unknown user",
-    userEmail: user?.email,
+    user: item.userFullName ?? user?.fullName ?? "Unknown user",
+    userEmail: item.userEmail ?? user?.email,
     reference: item.reference ?? undefined,
     service: item.service,
     type:
@@ -166,11 +166,14 @@ export function AdminTransactionsQueue({ items = [] }: AdminTransactionsQueuePro
     if (!silent) setIsLoading(true);
     setErrorMessage(null);
     try {
-      const [txs, users] = await Promise.all([
-        fetchAdminTransactions(),
-        fetchAdminUsers(),
-      ]);
-      if (Array.isArray(txs) && Array.isArray(users)) {
+      const txs = await fetchAdminTransactions();
+      let users: BackendAdminUser[] = [];
+      try {
+        users = await fetchAdminUsers();
+      } catch {
+        // Fallback to embedded userFullName/userEmail if user list fetch is slow
+      }
+      if (Array.isArray(txs)) {
         setTransactions(txs.map((tx) => mapToAdminTransactionRecord(tx, users)));
       }
     } catch (err) {

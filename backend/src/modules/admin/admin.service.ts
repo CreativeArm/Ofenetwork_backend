@@ -355,87 +355,67 @@ export class AdminService {
   }
 
   async searchUsers(query?: string) {
-    const rawQuery = (query || "").trim();
-    const normalizedQuery = rawQuery.toLowerCase();
+    const normalizedQuery = (query || "").trim().toLowerCase();
     const cacheKey = `admin:user-search:${normalizedQuery}`;
     const cachedUsers = await this.redis.getJson<unknown[]>(cacheKey);
     if (cachedUsers) {
       return cachedUsers;
     }
 
-    const dbUsers = await this.prisma.user.findMany({
-      where: {
-        role: "USER",
-        ...(rawQuery
-          ? {
-              OR: [
-                { id: { contains: rawQuery, mode: "insensitive" } },
-                { email: { contains: rawQuery, mode: "insensitive" } },
-                { fullName: { contains: rawQuery, mode: "insensitive" } },
-              ],
-            }
-          : {}),
-      },
-      include: {
-        wallet: {
-          include: {
-            credits: true,
-          },
-        },
-        transactions: {
-          orderBy: { createdAt: "desc" },
-        },
-      },
-      orderBy: { createdAt: "desc" },
+    const users = (await this.usersService.search(normalizedQuery)).filter(
+      (user) => user.role === "USER",
+    );
+
+    const userIds = users.map((u) => u.id);
+    const [allTransactions, allWallets] = await Promise.all([
+      this.prisma.transaction.findMany({
+        where: { userId: { in: userIds } },
+        orderBy: { createdAt: "desc" },
+      }),
+      this.prisma.wallet.findMany({
+        where: { userId: { in: userIds } },
+        include: { credits: true },
+      }),
+    ]);
+
+    const txMap = new Map<string, typeof allTransactions>();
+    allTransactions.forEach((tx) => {
+      const list = txMap.get(tx.userId) ?? [];
+      list.push(tx);
+      txMap.set(tx.userId, list);
     });
 
-    const now = new Date();
-    const result = dbUsers.map((user) => {
-      const availableNgn = user.wallet?.availableNgn.toNumber() ?? 0;
-      const availableUsd = user.wallet?.availableUsd.toNumber() ?? 0;
-      const activeCredits = (user.wallet?.credits ?? [])
-        .filter((credit) => credit.expiresAt > now)
-        .map((credit) => ({
-          id: credit.id,
-          amount: credit.amount.toNumber(),
-          currency: credit.currency,
-          type: credit.type,
-          expiresAt: credit.expiresAt.toISOString(),
-          consumedAmount: credit.consumedAmount.toNumber(),
-        }));
+    const walletMap = new Map(allWallets.map((w) => [w.userId, w]));
 
-      const totalBonusNgn = activeCredits
-        .filter((c) => c.currency === "NGN")
-        .reduce((sum, c) => sum + (c.amount - c.consumedAmount), 0);
-      const totalBonusUsd = activeCredits
-        .filter((c) => c.currency === "USD")
-        .reduce((sum, c) => sum + (c.amount - c.consumedAmount), 0);
+    const result = users.map((user) => {
+      const userTxs = txMap.get(user.id) ?? [];
+      const userWallet = walletMap.get(user.id);
 
       return {
-        id: user.id,
-        fullName: user.fullName,
-        email: user.email,
-        role: user.role,
-        status: user.status,
-        profileImageUrl: user.profileImageUrl ?? undefined,
-        kycStatus: user.kycStatus,
-        kycDocumentType: user.kycDocumentType ?? undefined,
-        kycDocumentUrl: user.kycDocumentUrl ?? undefined,
-        kycAdminNote: user.kycAdminNote ?? undefined,
-        kycSubmittedAt: user.kycSubmittedAt?.toISOString(),
-        kycReviewedAt: user.kycReviewedAt?.toISOString(),
-        createdAt: user.createdAt.toISOString(),
-        updatedAt: user.updatedAt.toISOString(),
-        wallet: {
-          id: user.wallet?.id ?? "",
-          userId: user.id,
-          availableNgn,
-          availableUsd,
-          totalBonusNgn,
-          totalBonusUsd,
-          activeCredits,
-        },
-        transactions: user.transactions.map((transaction) => ({
+        ...user,
+        wallet: userWallet
+          ? {
+              userId: userWallet.userId,
+              balances: {
+                NGN: userWallet.availableNgn.toNumber(),
+                USD: userWallet.availableUsd.toNumber(),
+              },
+              credits: userWallet.credits.map((credit) => ({
+                id: credit.id,
+                amount: credit.amount.toNumber(),
+                currency: credit.currency,
+                type: credit.type,
+                expiresAt: credit.expiresAt.toISOString(),
+                consumedAmount: credit.consumedAmount.toNumber(),
+                createdAt: credit.createdAt.toISOString(),
+              })),
+            }
+          : {
+              userId: user.id,
+              balances: { NGN: 0, USD: 0 },
+              credits: [],
+            },
+        transactions: userTxs.map((transaction) => ({
           id: transaction.id,
           userId: transaction.userId,
           type: transaction.type,
