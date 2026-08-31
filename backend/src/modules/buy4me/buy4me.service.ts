@@ -38,11 +38,14 @@ function defaultTimelineForStatus(status: Buy4MeStatus) {
 }
 
 function formatNaira(amount: number) {
-  return new Intl.NumberFormat("en-NG", {
+  const formatted = new Intl.NumberFormat("en-NG", {
     style: "currency",
     currency: "NGN",
+    currencyDisplay: "narrowSymbol",
     maximumFractionDigits: 2,
   }).format(amount);
+
+  return formatted.replace(/^([^\d\s]+)(\d)/, "$1 $2");
 }
 
 @Injectable()

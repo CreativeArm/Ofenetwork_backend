@@ -175,6 +175,23 @@ function chartBarHeight(value: number, maxValue: number) {
   return `${Math.max(8, Math.round((value / maxValue) * 100))}%`;
 }
 
+function getDynamicMetricFontSize(value: string) {
+  const len = value.length;
+  if (len > 18) {
+    return "text-sm sm:text-base";
+  }
+  if (len > 14) {
+    return "text-base sm:text-lg";
+  }
+  if (len > 11) {
+    return "text-lg sm:text-xl";
+  }
+  if (len > 9) {
+    return "text-xl sm:text-2xl";
+  }
+  return "text-2xl";
+}
+
 export function AdminDashboardWorkspace() {
   const [dashboardData, setDashboardData] = useState<BackendDashboardMetrics | null>(
     () => getCachedApi<BackendDashboardMetrics>("/admin/dashboard"),
@@ -380,44 +397,55 @@ export function AdminDashboardWorkspace() {
         </button>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {metrics.map((metric) => (
-          <AdminCard key={metric.label} className="rounded-[24px] p-5 shadow-sm">
-            <div className="flex items-center gap-3">
-              <span
-                className={`rounded-2xl p-3 ${
-                  metric.tint === "emerald"
-                    ? "bg-emerald-50 text-emerald-600"
-                    : metric.tint === "violet"
-                      ? "bg-violet-50 text-violet-600"
-                      : metric.tint === "sky"
-                        ? "bg-sky-50 text-sky-600"
-                        : metric.tint === "amber"
-                          ? "bg-amber-50 text-amber-600"
-                          : "bg-pink-50 text-pink-600"
-                }`}
-              >
-                <Icon
-                  name={
-                    metric.label.includes("Users")
-                      ? "users"
-                      : metric.label.includes("Transactions")
-                        ? "swap"
-                        : metric.label.includes("Deposits")
-                          ? "bank"
-                          : metric.label.includes("Withdrawals")
-                            ? "arrow"
-                            : "bag"
-                  }
-                  className="h-5 w-5"
-                />
-              </span>
-              <div>
-                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">{metric.label}</p>
-                <p className="text-2xl font-bold text-slate-900">{metric.value}</p>
+          <AdminCard key={metric.label} className="flex flex-col justify-between min-w-0 rounded-[24px] p-5 shadow-sm">
+            <div>
+              <div className="flex items-center justify-between gap-2">
+                <span
+                  className={`shrink-0 rounded-2xl p-2.5 ${
+                    metric.tint === "emerald"
+                      ? "bg-emerald-50 text-emerald-600"
+                      : metric.tint === "violet"
+                        ? "bg-violet-50 text-violet-600"
+                        : metric.tint === "sky"
+                          ? "bg-sky-50 text-sky-600"
+                          : metric.tint === "amber"
+                            ? "bg-amber-50 text-amber-600"
+                            : "bg-pink-50 text-pink-600"
+                  }`}
+                >
+                  <Icon
+                    name={
+                      metric.label.includes("Users")
+                        ? "users"
+                        : metric.label.includes("Transactions")
+                          ? "swap"
+                          : metric.label.includes("Deposits")
+                            ? "bank"
+                            : metric.label.includes("Withdrawals")
+                              ? "arrow"
+                              : "bag"
+                    }
+                    className="h-5 w-5"
+                  />
+                </span>
+                <p className="min-w-0 truncate text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  {metric.label}
+                </p>
+              </div>
+              <div className="mt-3 min-w-0">
+                <p
+                  className={`font-bold tracking-tight text-slate-900 break-words leading-tight transition-all ${getDynamicMetricFontSize(
+                    metric.value,
+                  )}`}
+                  title={metric.value}
+                >
+                  {metric.value}
+                </p>
               </div>
             </div>
-            <p className="mt-3 text-xs font-semibold text-[#0f7b36]">{metric.trend}</p>
+            <p className="mt-3 truncate text-xs font-semibold text-[#0f7b36]">{metric.trend}</p>
           </AdminCard>
         ))}
       </div>

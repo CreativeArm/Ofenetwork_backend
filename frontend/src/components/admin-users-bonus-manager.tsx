@@ -21,11 +21,14 @@ interface AdminUsersBonusManagerProps {
 }
 
 function formatCurrency(amount: number, currency: "NGN" | "USD" = "NGN") {
-  return new Intl.NumberFormat("en-NG", {
+  const formatted = new Intl.NumberFormat("en-NG", {
     style: "currency",
     currency,
+    currencyDisplay: "narrowSymbol",
     maximumFractionDigits: 2,
   }).format(amount);
+
+  return formatted.replace(/^([^\d\s]+)(\d)/, "$1 $2");
 }
 
 function formatBonusType(type: string) {
