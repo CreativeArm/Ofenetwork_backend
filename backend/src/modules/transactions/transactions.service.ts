@@ -259,6 +259,23 @@ export class TransactionsService {
     return transactions.map((transaction) => this.serializeTransaction(transaction));
   }
 
+  async getById(idOrReference: string) {
+    const transaction = await this.prisma.transaction.findFirst({
+      where: {
+        OR: [
+          { id: idOrReference },
+          { reference: idOrReference },
+        ],
+      },
+    });
+
+    if (!transaction) {
+      throw new NotFoundException(`Transaction '${idOrReference}' not found.`);
+    }
+
+    return this.serializeTransaction(transaction);
+  }
+
   async updateStatus(transactionId: string, status: "CONFIRMED" | "REJECTED", actorId: string, note?: string) {
     const transaction = await this.prisma.transaction.findUnique({
       where: { id: transactionId },

@@ -30,6 +30,11 @@ export class TransactionsController {
       : this.transactionsService.listAll();
   }
 
+  @Get(":id")
+  getById(@Param("id") id: string) {
+    return this.transactionsService.getById(id);
+  }
+
   @Patch(":id/status")
   updateStatus(
     @Param("id") id: string,

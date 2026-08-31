@@ -26,6 +26,8 @@ export interface AdminTransactionRecord {
   id: string;
   userId?: string;
   user: string;
+  userEmail?: string;
+  reference?: string;
   service: string;
   type: string;
   amount: string;
@@ -86,6 +88,15 @@ function getSubmittedDetails(transaction: AdminTransactionRecord) {
       }));
 
   if (details && details.length > 0) {
+    if (
+      transaction.reference &&
+      !details.some((d) => d.value.toLowerCase() === transaction.reference?.toLowerCase())
+    ) {
+      details.push({
+        label: "Reference",
+        value: transaction.reference,
+      });
+    }
     return details;
   }
 
@@ -112,6 +123,8 @@ function mapToAdminTransactionRecord(
     id: item.id,
     userId: item.userId,
     user: user?.fullName ?? "Unknown user",
+    userEmail: user?.email,
+    reference: item.reference ?? undefined,
     service: item.service,
     type:
       item.type === "DEPOSIT"
@@ -216,13 +229,20 @@ export function AdminTransactionsQueue({ items = [] }: AdminTransactionsQueuePro
 
       if (!query) return true;
 
+      const destValues = item.destinationDetails
+        ? Object.values(item.destinationDetails).join(" ").toLowerCase()
+        : "";
+
       return (
         item.id.toLowerCase().includes(query) ||
+        (item.reference && item.reference.toLowerCase().includes(query)) ||
         item.user.toLowerCase().includes(query) ||
+        (item.userEmail && item.userEmail.toLowerCase().includes(query)) ||
         item.service.toLowerCase().includes(query) ||
         item.type.toLowerCase().includes(query) ||
         item.amount.toLowerCase().includes(query) ||
-        item.paymentReference?.toLowerCase().includes(query)
+        item.paymentReference?.toLowerCase().includes(query) ||
+        destValues.includes(query)
       );
     });
   }, [selectedFilter, transactions, searchQuery]);

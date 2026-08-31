@@ -72,11 +72,16 @@ export function getTransactionDetailRows(
     }
   }
 
-  if (rows.length === 0 && transaction.reference) {
-    rows.push({
-      label: referenceLabelForService(transaction.service),
-      value: transaction.reference,
-    });
+  if (transaction.reference) {
+    const exists = rows.some(
+      (row) => row.value.toLowerCase() === transaction.reference?.toLowerCase(),
+    );
+    if (!exists) {
+      rows.push({
+        label: referenceLabelForService(transaction.service),
+        value: transaction.reference,
+      });
+    }
   }
 
   return rows;

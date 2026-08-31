@@ -171,7 +171,8 @@ export class AdminService {
       totalUsers,
       totalTransactions,
       pendingRequests,
-      confirmedTransactions,
+      depositAggregate,
+      withdrawalAggregate,
       monthlyTransactions,
       monthlyBuy4MeOrders,
       buy4MeStatusCounts,
@@ -182,15 +183,21 @@ export class AdminService {
         this.prisma.transaction.count({
           where: { status: "PENDING" },
         }),
-        this.prisma.transaction.findMany({
+        this.prisma.transaction.aggregate({
           where: {
             status: "CONFIRMED",
-            type: {
-              in: ["DEPOSIT", "WITHDRAWAL"],
-            },
+            type: "DEPOSIT",
           },
-          select: {
-            type: true,
+          _sum: {
+            nairaEquivalent: true,
+          },
+        }),
+        this.prisma.transaction.aggregate({
+          where: {
+            status: "CONFIRMED",
+            type: "WITHDRAWAL",
+          },
+          _sum: {
             nairaEquivalent: true,
           },
         }),
@@ -229,13 +236,8 @@ export class AdminService {
         }),
       ]);
 
-    const totalDeposits = confirmedTransactions
-      .filter((item) => item.type === "DEPOSIT")
-      .reduce((sum, item) => sum + item.nairaEquivalent.toNumber(), 0);
-
-    const totalWithdrawals = confirmedTransactions
-      .filter((item) => item.type === "WITHDRAWAL")
-      .reduce((sum, item) => sum + item.nairaEquivalent.toNumber(), 0);
+    const totalDeposits = depositAggregate._sum.nairaEquivalent?.toNumber() ?? 0;
+    const totalWithdrawals = withdrawalAggregate._sum.nairaEquivalent?.toNumber() ?? 0;
 
     const statusCountMap = new Map<Buy4MeStatus, number>(
       buy4MeStatusCounts.map((item) => [item.status, item._count._all]),
@@ -353,49 +355,107 @@ export class AdminService {
   }
 
   async searchUsers(query?: string) {
-    const normalizedQuery = (query || "").trim().toLowerCase();
+    const rawQuery = (query || "").trim();
+    const normalizedQuery = rawQuery.toLowerCase();
     const cacheKey = `admin:user-search:${normalizedQuery}`;
     const cachedUsers = await this.redis.getJson<unknown[]>(cacheKey);
     if (cachedUsers) {
       return cachedUsers;
     }
 
-    const users = (await this.usersService.search(normalizedQuery)).filter(
-      (user) => user.role === "USER",
-    );
-
-    const result = await Promise.all(
-      users.map(async (user) => {
-        const transactions = await this.prisma.transaction.findMany({
-          where: { userId: user.id },
+    const dbUsers = await this.prisma.user.findMany({
+      where: {
+        role: "USER",
+        ...(rawQuery
+          ? {
+              OR: [
+                { id: { contains: rawQuery, mode: "insensitive" } },
+                { email: { contains: rawQuery, mode: "insensitive" } },
+                { fullName: { contains: rawQuery, mode: "insensitive" } },
+              ],
+            }
+          : {}),
+      },
+      include: {
+        wallet: {
+          include: {
+            credits: true,
+          },
+        },
+        transactions: {
           orderBy: { createdAt: "desc" },
-        });
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
 
-        return {
-        ...user,
-        wallet: await this.walletService.getWallet(user.id),
-          transactions: transactions.map((transaction) => ({
-            id: transaction.id,
-            userId: transaction.userId,
-            type: transaction.type,
-            service: transaction.service,
-            amount: transaction.amount.toNumber(),
-            currency: transaction.currency,
-            nairaEquivalent: transaction.nairaEquivalent.toNumber(),
-            status: transaction.status,
-            reference: transaction.reference ?? undefined,
-            proofOfPaymentUrl: transaction.proofOfPaymentUrl ?? undefined,
-            destinationDetails:
-              (transaction.destinationDetails as Record<string, string> | null) ?? undefined,
-            adminActionHistory: Array.isArray(transaction.adminActionHistory)
-              ? transaction.adminActionHistory
-              : [],
-            createdAt: transaction.createdAt.toISOString(),
-            updatedAt: transaction.updatedAt.toISOString(),
-          })),
-        };
-      }),
-    );
+    const now = new Date();
+    const result = dbUsers.map((user) => {
+      const availableNgn = user.wallet?.availableNgn.toNumber() ?? 0;
+      const availableUsd = user.wallet?.availableUsd.toNumber() ?? 0;
+      const activeCredits = (user.wallet?.credits ?? [])
+        .filter((credit) => credit.expiresAt > now)
+        .map((credit) => ({
+          id: credit.id,
+          amount: credit.amount.toNumber(),
+          currency: credit.currency,
+          type: credit.type,
+          expiresAt: credit.expiresAt.toISOString(),
+          consumedAmount: credit.consumedAmount.toNumber(),
+        }));
+
+      const totalBonusNgn = activeCredits
+        .filter((c) => c.currency === "NGN")
+        .reduce((sum, c) => sum + (c.amount - c.consumedAmount), 0);
+      const totalBonusUsd = activeCredits
+        .filter((c) => c.currency === "USD")
+        .reduce((sum, c) => sum + (c.amount - c.consumedAmount), 0);
+
+      return {
+        id: user.id,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+        status: user.status,
+        profileImageUrl: user.profileImageUrl ?? undefined,
+        kycStatus: user.kycStatus,
+        kycDocumentType: user.kycDocumentType ?? undefined,
+        kycDocumentUrl: user.kycDocumentUrl ?? undefined,
+        kycAdminNote: user.kycAdminNote ?? undefined,
+        kycSubmittedAt: user.kycSubmittedAt?.toISOString(),
+        kycReviewedAt: user.kycReviewedAt?.toISOString(),
+        createdAt: user.createdAt.toISOString(),
+        updatedAt: user.updatedAt.toISOString(),
+        wallet: {
+          id: user.wallet?.id ?? "",
+          userId: user.id,
+          availableNgn,
+          availableUsd,
+          totalBonusNgn,
+          totalBonusUsd,
+          activeCredits,
+        },
+        transactions: user.transactions.map((transaction) => ({
+          id: transaction.id,
+          userId: transaction.userId,
+          type: transaction.type,
+          service: transaction.service,
+          amount: transaction.amount.toNumber(),
+          currency: transaction.currency,
+          nairaEquivalent: transaction.nairaEquivalent.toNumber(),
+          status: transaction.status,
+          reference: transaction.reference ?? undefined,
+          proofOfPaymentUrl: transaction.proofOfPaymentUrl ?? undefined,
+          destinationDetails:
+            (transaction.destinationDetails as Record<string, string> | null) ?? undefined,
+          adminActionHistory: Array.isArray(transaction.adminActionHistory)
+            ? transaction.adminActionHistory
+            : [],
+          createdAt: transaction.createdAt.toISOString(),
+          updatedAt: transaction.updatedAt.toISOString(),
+        })),
+      };
+    });
 
     await this.redis.setJson(cacheKey, result, 15);
 
