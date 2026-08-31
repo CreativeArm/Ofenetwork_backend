@@ -183,14 +183,14 @@ export function AdminSupportQueue({ items = [], liveMode = true }: AdminSupportQ
   return (
     <>
       <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <div className="flex items-center gap-3">
-            <h3 className="text-xl font-semibold">Support Queue ({tickets.length})</h3>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-3">
+            <h3 className="whitespace-nowrap text-xl font-semibold">Support Queue ({tickets.length})</h3>
             <button
               type="button"
               onClick={() => loadTickets()}
               disabled={isLoading}
-              className="inline-flex items-center gap-1.5 rounded-full border border-[#dbe5df] bg-white px-3 py-1 text-xs font-semibold text-slate-600 transition hover:bg-[#f4f7f5] disabled:opacity-60"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[#dbe5df] bg-white px-3 py-1 text-xs font-semibold text-slate-600 transition hover:bg-[#f4f7f5] disabled:opacity-60"
             >
               <Icon name="arrow" className={`h-3 w-3 ${isLoading ? "animate-spin" : ""}`} />
               {isLoading ? "Refreshing..." : "Refresh"}
