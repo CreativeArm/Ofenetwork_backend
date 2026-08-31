@@ -113,7 +113,8 @@ async function renderSection(section: AdminSectionSlug) {
 
               return {
                 id: item.id,
-                user: user?.fullName ?? "Unknown user",
+                user: item.userFullName ?? user?.fullName ?? "Unknown user",
+                userEmail: item.userEmail ?? user?.email,
                 service: item.service,
                 type:
                   item.type === "DEPOSIT"

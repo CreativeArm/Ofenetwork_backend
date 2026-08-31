@@ -42,6 +42,8 @@ export interface BackendDashboardMetrics {
 export interface BackendTransaction {
   id: string;
   userId: string;
+  userFullName?: string;
+  userEmail?: string;
   type: "DEPOSIT" | "WITHDRAWAL" | "WALLET_CREDIT" | "WALLET_DEBIT" | "BUY4ME_PAYMENT";
   service: string;
   amount: number;
