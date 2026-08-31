@@ -108,7 +108,7 @@ export function UserTransactionHistory() {
         <div>
           <h3 className="text-2xl font-semibold text-slate-900">Transaction History</h3>
           <p className="mt-1 text-sm text-slate-500">
-            Track your submitted deposits, withdrawals, and admin decisions.
+            Track your submitted deposits, withdrawals, and status updates.
           </p>
         </div>
         <span className="rounded-full bg-[#f3fbf5] px-3 py-1 text-xs font-semibold text-[#0f7b36]">

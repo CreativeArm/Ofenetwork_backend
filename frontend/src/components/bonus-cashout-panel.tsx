@@ -146,7 +146,7 @@ export function BonusCashoutPanel() {
       setAmount("");
       loadWallet(userId);
       notifyBonusBalanceUpdated(userId);
-      setFeedback("Bonus cashout submitted. Admin will review it shortly.");
+      setFeedback("Bonus cashout submitted. Our team will review it shortly.");
     } catch (error) {
       setFeedback(
         error instanceof Error ? error.message : "Unable to submit bonus cashout.",

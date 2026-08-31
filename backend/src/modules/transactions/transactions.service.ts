@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { KycStatus, Prisma, TransactionStatus, TransactionType } from "@prisma/client";
+import { KycStatus, Prisma, TransactionStatus, TransactionType, UserRole } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
 import { RedisService } from "../../infrastructure/redis/redis.service";
 import { CreateDepositDto } from "./dto/create-deposit.dto";
@@ -168,21 +168,23 @@ export class TransactionsService {
     await this.notificationsService.create(
       payload.userId,
       "Deposit submitted",
-      `Your ${payload.service} deposit is pending admin review.`,
+      `Your ${payload.service} deposit is pending review.`,
     );
-    await this.redis.delete("admin:dashboard:metrics");
+    await this.notificationsService.createForRole(
+      UserRole.ADMIN,
+      "New Deposit Submitted",
+      `A new ${payload.service} deposit of ${payload.amount} ${payload.currency} has been submitted and is pending review.`,
+    );
+    await Promise.all([
+      this.redis.delete("admin:dashboard:metrics"),
+      this.redis.delete("admin:user-search:"),
+    ]);
     return this.serializeTransaction(transaction);
   }
 
   async createWithdrawal(payload: CreateWithdrawalDto) {
     await this.ensureKycApproved(payload.userId);
     const nairaEquivalent = await this.calculateWithdrawalNairaEquivalent(payload);
-
-    await this.walletService.debitWallet(
-      payload.userId,
-      payload.amount,
-      payload.currency,
-    );
 
     const transaction = await this.prisma.transaction.create({
       data: {
@@ -202,9 +204,17 @@ export class TransactionsService {
     await this.notificationsService.create(
       payload.userId,
       "Withdrawal requested",
-      `Your ${payload.amount} ${payload.currency} withdrawal has been queued for admin processing.`,
+      `Your ${payload.amount} ${payload.currency} withdrawal has been queued for processing.`,
     );
-    await this.redis.delete("admin:dashboard:metrics");
+    await this.notificationsService.createForRole(
+      UserRole.ADMIN,
+      "New Withdrawal Requested",
+      `A new ${payload.service} withdrawal of ${payload.amount} ${payload.currency} has been requested and is pending review.`,
+    );
+    await Promise.all([
+      this.redis.delete("admin:dashboard:metrics"),
+      this.redis.delete("admin:user-search:"),
+    ]);
     return this.serializeTransaction(transaction);
   }
 
@@ -236,9 +246,17 @@ export class TransactionsService {
     await this.notificationsService.create(
       payload.userId,
       "Bonus cashout requested",
-      `Your ${payload.amount} NGN bonus cashout is pending admin review.`,
+      `Your ${payload.amount} NGN bonus cashout is pending review.`,
     );
-    await this.redis.delete("admin:dashboard:metrics");
+    await this.notificationsService.createForRole(
+      UserRole.ADMIN,
+      "Bonus Cashout Requested",
+      `A bonus cashout of ${payload.amount} NGN has been requested and is pending review.`,
+    );
+    await Promise.all([
+      this.redis.delete("admin:dashboard:metrics"),
+      this.redis.delete("admin:user-search:"),
+    ]);
     return this.serializeTransaction(transaction);
   }
 

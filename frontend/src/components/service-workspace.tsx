@@ -255,12 +255,12 @@ export function ServiceWorkspace({ activeSlug, title, subtitle }: ServiceWorkspa
       });
       setDepositValues({});
       setDepositProof(null);
-      const message = "Deposit submitted with your screenshot. Admin will review it shortly.";
+      const message = "Deposit submitted with your screenshot. Our team will review it shortly.";
       setFeedback(message);
       setSubmittedPopup({
         title: "Deposit submitted successfully",
         message: `Your ${service.name} deposit has been submitted.`,
-        detail: "Admin has received your payment screenshot and transaction details. You can track the review from your transaction history.",
+        detail: "Our team has received your payment screenshot and transaction details. You can track the review from your transaction history.",
       });
     } catch (error) {
       setFeedback(
@@ -311,12 +311,12 @@ export function ServiceWorkspace({ activeSlug, title, subtitle }: ServiceWorkspa
       setWithdrawalValues({});
       setWithdrawalProof(null);
       setRequestBonusWithdrawal(false);
-      const message = "Withdrawal submitted with your screenshot. Admin will review it shortly.";
+      const message = "Withdrawal submitted with your screenshot. Our team will review it shortly.";
       setFeedback(message);
       setSubmittedPopup({
         title: "Withdrawal submitted successfully",
         message: `Your ${service.name} withdrawal has been submitted.`,
-        detail: "Admin has received your screenshot and payout details. You can track the review from your transaction history.",
+        detail: "Our team has received your screenshot and payout details. You can track the review from your transaction history.",
       });
     } catch (error) {
       setFeedback(
@@ -589,7 +589,7 @@ export function ServiceWorkspace({ activeSlug, title, subtitle }: ServiceWorkspa
                     Request bonus withdrawal on this transaction
                   </span>
                   <span className="mt-1 block text-xs leading-5 text-slate-500">
-                    Admin will review your available referral or threshold bonus with this withdrawal request.
+                    Our team will review your available referral or threshold bonus with this withdrawal request.
                   </span>
                 </span>
               </label>

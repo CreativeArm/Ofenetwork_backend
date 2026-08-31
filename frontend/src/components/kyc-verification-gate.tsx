@@ -33,7 +33,7 @@ function statusCopy(status?: BackendKycStatus) {
     return {
       title: "KYC review in progress",
       description:
-        "Your document has been submitted. Transactions will unlock once admin approves your KYC.",
+        "Your document has been submitted. Transactions will unlock once our team reviews your KYC.",
       badge: "Pending Review",
       tone: "bg-amber-50 text-amber-700",
     };
@@ -196,7 +196,7 @@ export function KycVerificationGate({
       setUpload(null);
       setNotes("");
       window.localStorage.setItem("ofe_user", JSON.stringify(updated));
-      setFeedback("KYC submitted successfully. Admin will review it shortly.");
+      setFeedback("KYC submitted successfully. Our team will review it shortly.");
     } catch (error) {
       setFeedback(
         error instanceof Error ? error.message : "Unable to submit KYC right now.",
@@ -225,7 +225,7 @@ export function KycVerificationGate({
           <p className="mt-2 text-sm leading-6 text-slate-600">{copy.description}</p>
           {user?.kycAdminNote ? (
             <p className="mt-4 rounded-2xl bg-[#fff8e8] px-4 py-3 text-sm leading-6 text-slate-700">
-              Admin note: {user.kycAdminNote}
+              Review note: {user.kycAdminNote}
             </p>
           ) : null}
         </div>
@@ -233,7 +233,7 @@ export function KycVerificationGate({
         <div className="rounded-[22px] bg-[#f8fbf8] p-4 text-sm text-slate-600 lg:w-[320px]">
           <p className="font-semibold text-slate-900">What happens next?</p>
           <p className="mt-2 leading-6">
-            Submit your document once. Admin reviews it, then all transaction features unlock automatically.
+            Submit your document once. Our team reviews it, then all transaction features unlock automatically.
           </p>
         </div>
       </div>
@@ -276,7 +276,7 @@ export function KycVerificationGate({
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
               className="w-full rounded-2xl border border-[#e5ebe7] px-4 py-3 text-sm outline-none transition focus:border-[#9bc8aa]"
-              placeholder="Add any note for admin"
+              placeholder="Add any additional note for review"
             />
           </label>
 

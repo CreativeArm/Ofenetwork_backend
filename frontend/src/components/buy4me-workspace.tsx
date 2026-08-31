@@ -289,12 +289,12 @@ export function Buy4MeWorkspace() {
       setOrders((current) => [created, ...current]);
       setProductLink("");
       setProductDetails("");
-      const message = "Your request has been submitted. Admin is now reviewing it.";
+      const message = "Your request has been submitted. Our team is now reviewing it.";
       setFeedback(message);
       setSubmittedPopup({
         title: "Buy4Me request submitted",
         message: "Your product link has been submitted successfully.",
-        detail: "Admin has been notified and will review your link. Your order status will remain Processing until a quote is ready.",
+        detail: "Our team has been notified and will review your link. Your order status will remain Processing until a quote is ready.",
       });
     } catch (error) {
       setFeedback(
@@ -327,12 +327,12 @@ export function Buy4MeWorkspace() {
         current.map((order) => (order.id === updated.id ? updated : order)),
       );
       setSelectedProof(null);
-      const message = "Payment details submitted. Admin will confirm your order shortly.";
+      const message = "Payment details submitted. Our team will confirm your order shortly.";
       setFeedback(message);
       setSubmittedPopup({
         title: "Payment proof submitted",
         message: "Your Buy4Me payment proof has been submitted successfully.",
-        detail: "Admin can now review your screenshot and move your order to the next stage once payment is confirmed.",
+        detail: "Our team can now review your screenshot and move your order to the next stage once payment is confirmed.",
       });
     } catch (error) {
       setFeedback(
@@ -431,7 +431,7 @@ export function Buy4MeWorkspace() {
                 value={productDetails}
                 onChange={(event) => setProductDetails(event.target.value)}
                 className="min-h-[110px] w-full resize-none border-0 text-sm outline-none"
-                placeholder="Optional: add product size, color, quantity, or any extra note for the admin."
+                placeholder="Optional: add product size, color, quantity, or any extra note for us."
               />
             </div>
             {feedback ? (
@@ -441,7 +441,7 @@ export function Buy4MeWorkspace() {
             ) : null}
             <ul className="mt-4 space-y-2 text-sm text-slate-500">
               <li>We can purchase multiple links in one request.</li>
-              <li>Once you submit, the admin team is notified automatically.</li>
+              <li>Once you submit, our team is notified automatically.</li>
             </ul>
             <button
               type="button"
@@ -464,7 +464,7 @@ export function Buy4MeWorkspace() {
                 </span>
               </div>
               <div className="rounded-[22px] bg-[#fff8e8] p-4 text-sm text-slate-600">
-                {activeOrder.timelineUpdate ?? "Your request is being reviewed by admin."}
+                {activeOrder.timelineUpdate ?? "Your request is being reviewed."}
               </div>
               {activeOrder.totalCost != null ? (
                 <div className="mt-5 space-y-4 rounded-[22px] border border-[#edf1ee] p-5">
@@ -502,7 +502,7 @@ export function Buy4MeWorkspace() {
                 </div>
               ) : (
                 <div className="mt-5 rounded-[22px] border border-[#edf1ee] bg-[#fbfcfb] p-5 text-sm text-slate-500">
-                  Admin has been notified. Pricing will appear here once your request has been reviewed.
+                  Our team has been notified. Pricing will appear here once your request has been reviewed.
                 </div>
               )}
             </div>
@@ -933,7 +933,7 @@ export function Buy4MeWorkspace() {
               }`}>
                 {activeOrder.status === "CANCELLED"
                   ? cancelledOrderNote
-                  : activeOrder.timelineUpdate ?? "Your request is being reviewed by admin."}
+                  : activeOrder.timelineUpdate ?? "Your request is being reviewed."}
               </p>
             </div>
 
@@ -991,7 +991,7 @@ export function Buy4MeWorkspace() {
                   </div>
                 ) : (
                   <p className="mt-4 rounded-[18px] bg-[#fbfcfb] p-4 text-sm leading-6 text-slate-500">
-                    Admin has been notified. Pricing will appear here once your request has been reviewed.
+                    Our team has been notified. Pricing will appear here once your request has been reviewed.
                   </p>
                 )}
               </div>
@@ -999,7 +999,7 @@ export function Buy4MeWorkspace() {
 
             {!showQuote && activeOrder.status !== "CANCELLED" ? (
               <div className={`${showPayment ? "" : "mt-5"} rounded-[22px] border border-[#edf1ee] bg-[#fbfcfb] p-5 text-sm leading-6 text-slate-500`}>
-                Admin is reviewing your submitted product link. Quote and payment details will appear once ready.
+                Our team is reviewing your submitted product link. Quote and payment details will appear once ready.
               </div>
             ) : null}
             </div>

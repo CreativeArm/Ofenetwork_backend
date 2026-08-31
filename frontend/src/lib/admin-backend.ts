@@ -308,7 +308,7 @@ async function mutateApi<T>(path: string, init: RequestInit): Promise<T> {
   if (path.includes("/rates")) {
     invalidateApiCache(/^\/rates/);
   } else if (path.includes("/transactions") || path.includes("/wallet")) {
-    invalidateApiCache(/\/(transactions|wallet|admin\/dashboard)/);
+    invalidateApiCache(/\/(transactions|wallet|admin\/dashboard|admin\/search-users)/);
   } else if (path.includes("/buy4me")) {
     invalidateApiCache(/\/(buy4me|admin\/dashboard)/);
   } else if (path.includes("/kyc") || path.includes("/users")) {

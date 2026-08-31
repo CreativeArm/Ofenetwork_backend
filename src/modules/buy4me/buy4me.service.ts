@@ -23,15 +23,15 @@ function defaultTimelineForStatus(status: Buy4MeStatus) {
       return "Quote ready. Awaiting customer payment.";
     case "PAYMENT_SUBMITTED":
     case "PROCESSING":
-      return "Payment submitted. Admin is confirming and preparing your order.";
+      return "Payment submitted. Our team is confirming and preparing your order.";
     case "PURCHASING":
-      return "Payment confirmed. Admin is purchasing your item.";
+      return "Payment confirmed. Our team is purchasing your item.";
     case "SHIPPED":
       return "Your product has been purchased and shipped.";
     case "COMPLETED":
       return "Order delivered successfully.";
     case "ISSUE":
-      return "There is an issue with this order. Admin will contact you.";
+      return "There is an issue with this order. Support will contact you.";
     default:
       return "Order status updated.";
   }
@@ -119,14 +119,14 @@ export class Buy4MeService {
         productLink: payload.productLink,
         productDetails: payload.productDetails.trim(),
         status: "PROCESSING",
-        timelineUpdate: "Request submitted. Admin review in progress.",
-        adminNote: "Awaiting pricing review from admin.",
+        timelineUpdate: "Request submitted. Review in progress.",
+        adminNote: "Awaiting pricing review.",
       },
     });
     await this.notificationsService.create(
       payload.userId,
       "Buy4Me request submitted",
-      "Your Buy4Me request is now processing for admin review.",
+      "Your Buy4Me request is now processing for review.",
     );
     await this.notificationsService.createForRole(
       UserRole.ADMIN,
@@ -200,7 +200,7 @@ export class Buy4MeService {
         paymentMethod: payload.paymentMethod.trim(),
         proofOfPaymentUrl: payload.proofOfPaymentUrl?.trim() || null,
         status: "PROCESSING",
-        timelineUpdate: "Payment submitted. Admin is confirming and preparing your order.",
+        timelineUpdate: "Payment submitted. Our team is confirming and preparing your order.",
         adminNote:
           "Customer has uploaded payment proof for verification. Order moved back into processing.",
       },
@@ -209,7 +209,7 @@ export class Buy4MeService {
     await this.notificationsService.create(
       order.userId,
       "Buy4Me payment submitted",
-      "Your Buy4Me payment proof has been sent to admin for confirmation.",
+      "Your Buy4Me payment proof has been submitted for confirmation.",
     );
     await this.notificationsService.createForRole(
       UserRole.ADMIN,
