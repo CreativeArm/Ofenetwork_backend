@@ -52,6 +52,19 @@ export interface DashboardMetrics {
   totalTransactions: number;
   totalBuy4MeOrders: number;
   pendingRequests: number;
+  pendingDeposits: number;
+  pendingWithdrawals: number;
+  pendingBuy4Me: number;
+  unverifiedUsers: number;
+  pendingKycCount: number;
+  verifiedUsers: number;
+  recentUsers: Array<{
+    id: string;
+    fullName: string;
+    email: string;
+    kycStatus: string;
+    createdAt: string;
+  }>;
   monthlyOverview: Array<{
     key: string;
     label: string;
@@ -171,6 +184,13 @@ export class AdminService {
       totalUsers,
       totalTransactions,
       pendingRequests,
+      pendingDeposits,
+      pendingWithdrawals,
+      pendingBuy4Me,
+      unverifiedUsers,
+      pendingKycCount,
+      verifiedUsers,
+      recentUsersRaw,
       depositAggregate,
       withdrawalAggregate,
       monthlyTransactions,
@@ -178,63 +198,103 @@ export class AdminService {
       buy4MeStatusCounts,
       recentActivities,
     ] = await Promise.all([
-        this.prisma.user.count(),
-        this.prisma.transaction.count(),
-        this.prisma.transaction.count({
-          where: { status: "PENDING" },
-        }),
-        this.prisma.transaction.aggregate({
-          where: {
-            status: "CONFIRMED",
-            type: "DEPOSIT",
+      this.prisma.user.count({ where: { role: "USER" } }),
+      this.prisma.transaction.count(),
+      this.prisma.transaction.count({
+        where: { status: "PENDING" },
+      }),
+      this.prisma.transaction.count({
+        where: { status: "PENDING", type: "DEPOSIT" },
+      }),
+      this.prisma.transaction.count({
+        where: { status: "PENDING", type: "WITHDRAWAL" },
+      }),
+      this.prisma.buy4MeOrder.count({
+        where: {
+          status: {
+            in: [
+              "PROCESSING",
+              "PAYMENT_SUBMITTED",
+              "PURCHASING",
+              "AWAITING_PAYMENT",
+              "ISSUE",
+            ],
           },
-          _sum: {
-            nairaEquivalent: true,
+        },
+      }),
+      this.prisma.user.count({
+        where: { role: "USER", kycStatus: { not: "APPROVED" } },
+      }),
+      this.prisma.user.count({
+        where: { role: "USER", kycStatus: "PENDING" },
+      }),
+      this.prisma.user.count({
+        where: { role: "USER", kycStatus: "APPROVED" },
+      }),
+      this.prisma.user.findMany({
+        where: { role: "USER" },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+          kycStatus: true,
+          createdAt: true,
+        },
+      }),
+      this.prisma.transaction.aggregate({
+        where: {
+          status: "CONFIRMED",
+          type: "DEPOSIT",
+        },
+        _sum: {
+          nairaEquivalent: true,
+        },
+      }),
+      this.prisma.transaction.aggregate({
+        where: {
+          status: "CONFIRMED",
+          type: "WITHDRAWAL",
+        },
+        _sum: {
+          nairaEquivalent: true,
+        },
+      }),
+      this.prisma.transaction.findMany({
+        where: {
+          createdAt: { gte: monthlyStart },
+          status: "CONFIRMED",
+          type: {
+            in: ["DEPOSIT", "WITHDRAWAL"],
           },
-        }),
-        this.prisma.transaction.aggregate({
-          where: {
-            status: "CONFIRMED",
-            type: "WITHDRAWAL",
-          },
-          _sum: {
-            nairaEquivalent: true,
-          },
-        }),
-        this.prisma.transaction.findMany({
-          where: {
-            createdAt: { gte: monthlyStart },
-            status: "CONFIRMED",
-            type: {
-              in: ["DEPOSIT", "WITHDRAWAL"],
-            },
-          },
-          select: {
-            type: true,
-            nairaEquivalent: true,
-            createdAt: true,
-          },
-        }),
-        this.prisma.buy4MeOrder.findMany({
-          where: {
-            createdAt: { gte: monthlyStart },
-            status: { not: "CANCELLED" },
-            totalCost: { not: null },
-          },
-          select: {
-            totalCost: true,
-            createdAt: true,
-          },
-        }),
-        this.prisma.buy4MeOrder.groupBy({
-          by: ["status"],
-          _count: { _all: true },
-        }),
-        this.prisma.auditLog.findMany({
-          orderBy: { createdAt: "desc" },
-          take: 10,
-        }),
-      ]);
+        },
+        select: {
+          type: true,
+          nairaEquivalent: true,
+          createdAt: true,
+        },
+      }),
+      this.prisma.buy4MeOrder.findMany({
+        where: {
+          createdAt: { gte: monthlyStart },
+          status: { not: "CANCELLED" },
+          totalCost: { not: null },
+        },
+        select: {
+          totalCost: true,
+          createdAt: true,
+        },
+      }),
+      this.prisma.buy4MeOrder.groupBy({
+        by: ["status"],
+        _count: { _all: true },
+      }),
+      this.prisma.auditLog.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 10,
+      }),
+    ]);
 
     const totalDeposits = depositAggregate._sum.nairaEquivalent?.toNumber() ?? 0;
     const totalWithdrawals = withdrawalAggregate._sum.nairaEquivalent?.toNumber() ?? 0;
@@ -263,6 +323,19 @@ export class AdminService {
       totalTransactions,
       totalBuy4MeOrders,
       pendingRequests,
+      pendingDeposits,
+      pendingWithdrawals,
+      pendingBuy4Me,
+      unverifiedUsers,
+      pendingKycCount,
+      verifiedUsers,
+      recentUsers: recentUsersRaw.map((u) => ({
+        id: u.id,
+        fullName: u.fullName,
+        email: u.email,
+        kycStatus: u.kycStatus,
+        createdAt: u.createdAt.toISOString(),
+      })),
       monthlyOverview: buildMonthlyOverview(
         monthlyStart,
         monthlyTransactions,

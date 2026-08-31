@@ -15,6 +15,19 @@ export interface BackendDashboardMetrics {
   totalTransactions: number;
   totalBuy4MeOrders?: number;
   pendingRequests: number;
+  pendingDeposits?: number;
+  pendingWithdrawals?: number;
+  pendingBuy4Me?: number;
+  unverifiedUsers?: number;
+  pendingKycCount?: number;
+  verifiedUsers?: number;
+  recentUsers?: Array<{
+    id: string;
+    fullName: string;
+    email: string;
+    kycStatus: string;
+    createdAt: string;
+  }>;
   monthlyOverview?: Array<{
     key: string;
     label: string;
@@ -308,8 +321,21 @@ async function mutateApi<T>(path: string, init: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || `Request failed for ${path}: ${response.status}`);
+    const rawMessage = await response.text();
+    let errorMessage = rawMessage;
+    try {
+      const parsed = JSON.parse(rawMessage);
+      if (parsed && typeof parsed === "object") {
+        if (Array.isArray(parsed.message)) {
+          errorMessage = parsed.message.join(", ");
+        } else if (typeof parsed.message === "string") {
+          errorMessage = parsed.message;
+        }
+      }
+    } catch {
+      // Keep raw message if not JSON
+    }
+    throw new Error(errorMessage || `Request failed for ${path}: ${response.status}`);
   }
 
   if (path.includes("/rates")) {

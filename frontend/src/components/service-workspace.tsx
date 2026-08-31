@@ -288,6 +288,14 @@ export function ServiceWorkspace({ activeSlug, title, subtitle }: ServiceWorkspa
       return;
     }
 
+    const missingDetailField = service.withdrawalFields.find(
+      (field) => !(withdrawalValues[field.label] ?? "").trim(),
+    );
+    if (missingDetailField) {
+      setFeedback(`Please enter your ${missingDetailField.label} before submitting.`);
+      return;
+    }
+
     if (!withdrawalRateValue || !withdrawalNairaEquivalent) {
       setFeedback("Unable to calculate the NGN amount right now. Please check the service rate and try again.");
       return;
@@ -315,8 +323,8 @@ export function ServiceWorkspace({ activeSlug, title, subtitle }: ServiceWorkspa
       setFeedback(message);
       setSubmittedPopup({
         title: "Withdrawal submitted successfully",
-        message: `Your ${service.name} withdrawal has been submitted.`,
-        detail: "Our team has received your screenshot and payout details. You can track the review from your transaction history.",
+        message: `Your ${service.name} withdrawal of $${amount} has been submitted.`,
+        detail: "Our team has received your payment screenshot and payout details. You can track the review from your transaction history.",
       });
     } catch (error) {
       setFeedback(

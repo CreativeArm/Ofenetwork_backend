@@ -213,17 +213,20 @@ export function AdminDashboardWorkspace() {
   const loadData = async (silent = false) => {
     if (!silent && !dashboardData) setIsLoading(true);
     try {
-      const [dashRes, txRes, usersRes, b4mRes] = await Promise.allSettled([
-        fetchAdminDashboardMetrics(),
+      const dashMetrics = await fetchAdminDashboardMetrics();
+      setDashboardData(dashMetrics);
+      if (!silent) setIsLoading(false);
+
+      // Non-blocking secondary loads
+      Promise.allSettled([
         fetchAdminTransactions(),
         fetchAdminUsers(),
         fetchAdminBuy4MeOrders(),
-      ]);
-
-      if (dashRes.status === "fulfilled") setDashboardData(dashRes.value);
-      if (txRes.status === "fulfilled") setTransactions(txRes.value);
-      if (usersRes.status === "fulfilled") setUsers(usersRes.value);
-      if (b4mRes.status === "fulfilled") setBuy4meOrders(b4mRes.value);
+      ]).then(([txRes, usersRes, b4mRes]) => {
+        if (txRes.status === "fulfilled") setTransactions(txRes.value);
+        if (usersRes.status === "fulfilled") setUsers(usersRes.value);
+        if (b4mRes.status === "fulfilled") setBuy4meOrders(b4mRes.value);
+      });
     } catch {
       // Keep state
     } finally {
@@ -294,17 +297,24 @@ export function AdminDashboardWorkspace() {
       .filter((t) => t.type === "WITHDRAWAL" && t.status === "CONFIRMED")
       .reduce((sum, t) => sum + (t.nairaEquivalent || 0), 0);
 
+  const verifiedUsersCount =
+    dashboardData?.verifiedUsers ??
+    users.filter((u) => u.kycStatus === "APPROVED").length;
+  const pendingTransactionsCount =
+    dashboardData?.pendingRequests ??
+    transactions.filter((t) => t.status === "PENDING").length;
+
   const metrics = [
     {
       label: "Total Users",
       value: totalUsersCount.toLocaleString(),
-      trend: `${users.filter((u) => u.kycStatus === "APPROVED").length} verified`,
+      trend: `${verifiedUsersCount} verified`,
       tint: metricTints[0],
     },
     {
       label: "Total Transactions",
       value: totalTransactionsCount.toLocaleString(),
-      trend: `${transactions.filter((t) => t.status === "PENDING").length} pending`,
+      trend: `${pendingTransactionsCount} pending`,
       tint: metricTints[1],
     },
     {
@@ -345,37 +355,62 @@ export function AdminDashboardWorkspace() {
     };
   });
 
-  const recentUsersData = users.slice(0, 5).map((user) => ({
-    name: user.fullName || "Unnamed User",
-    email: user.email,
-    status:
-      user.kycStatus === "APPROVED"
-        ? "Verified"
-        : user.kycStatus === "PENDING"
-          ? "KYC Pending"
-          : user.kycStatus === "REJECTED"
-            ? "KYC Rejected"
-            : "Unverified",
-    time: user.createdAt ? formatRelativeTime(user.createdAt) : "Recently",
-  }));
+  const recentUsersData = dashboardData?.recentUsers?.length
+    ? dashboardData.recentUsers.map((user) => ({
+        name: user.fullName || "Unnamed User",
+        email: user.email,
+        status:
+          user.kycStatus === "APPROVED"
+            ? "Verified"
+            : user.kycStatus === "PENDING"
+              ? "KYC Pending"
+              : user.kycStatus === "REJECTED"
+                ? "KYC Rejected"
+                : "Unverified",
+        time: user.createdAt ? formatRelativeTime(user.createdAt) : "Recently",
+      }))
+    : users.slice(0, 5).map((user) => ({
+        name: user.fullName || "Unnamed User",
+        email: user.email,
+        status:
+          user.kycStatus === "APPROVED"
+            ? "Verified"
+            : user.kycStatus === "PENDING"
+              ? "KYC Pending"
+              : user.kycStatus === "REJECTED"
+                ? "KYC Rejected"
+                : "Unverified",
+        time: user.createdAt ? formatRelativeTime(user.createdAt) : "Recently",
+      }));
 
-  const pendingDeposits = transactions.filter(
-    (item) => item.type === "DEPOSIT" && item.status === "PENDING",
-  ).length;
-  const pendingWithdrawals = transactions.filter(
-    (item) => item.type === "WITHDRAWAL" && item.status === "PENDING",
-  ).length;
-  const pendingKycCount = users.filter((item) => item.kycStatus === "PENDING").length;
-  const pendingBuy4MeCount = buy4meOrders.filter(
-    (item) => item.status !== "COMPLETED" && item.status !== "CANCELLED",
-  ).length;
+  const pendingDeposits =
+    dashboardData?.pendingDeposits ??
+    transactions.filter(
+      (item) => item.type === "DEPOSIT" && item.status === "PENDING",
+    ).length;
+  const pendingWithdrawals =
+    dashboardData?.pendingWithdrawals ??
+    transactions.filter(
+      (item) => item.type === "WITHDRAWAL" && item.status === "PENDING",
+    ).length;
+  const pendingKycCount =
+    dashboardData?.pendingKycCount ??
+    users.filter((item) => item.kycStatus === "PENDING").length;
+  const pendingBuy4MeCount =
+    dashboardData?.pendingBuy4Me ??
+    buy4meOrders.filter(
+      (item) => item.status !== "COMPLETED" && item.status !== "CANCELLED",
+    ).length;
+  const unverifiedUsersCount =
+    dashboardData?.unverifiedUsers ??
+    users.filter((item) => item.kycStatus !== "APPROVED").length;
 
   const liveSystemSummary = [
     { label: "Pending KYC Reviews", value: pendingKycCount, href: "/admin/kyc" },
     { label: "Pending Deposits", value: pendingDeposits, href: "/admin/transactions" },
     { label: "Pending Withdrawals", value: pendingWithdrawals, href: "/admin/transactions" },
     { label: "Active Buy 4 Me Orders", value: pendingBuy4MeCount, href: "/admin/buy4me" },
-    { label: "Unverified Users", value: users.filter((item) => item.kycStatus !== "APPROVED").length, href: "/admin/users" },
+    { label: "Unverified Users", value: unverifiedUsersCount, href: "/admin/users" },
   ];
 
   return (
