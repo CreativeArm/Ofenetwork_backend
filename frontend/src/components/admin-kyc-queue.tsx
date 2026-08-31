@@ -205,14 +205,14 @@ export function AdminKycQueue({ items = [] }: AdminKycQueueProps) {
   return (
     <>
       <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
+        <div className="min-w-0">
           <div className="flex items-center gap-3">
-            <h3 className="text-xl font-semibold">Verification Queue</h3>
+            <h3 className="whitespace-nowrap text-xl font-semibold">Verification Queue</h3>
             <button
               type="button"
               onClick={() => loadKycRecords()}
               disabled={isLoading}
-              className="inline-flex items-center gap-1.5 rounded-full border border-[#dbe5df] bg-white px-3 py-1 text-xs font-semibold text-slate-600 transition hover:bg-[#f4f7f5] disabled:opacity-60"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[#dbe5df] bg-white px-3 py-1 text-xs font-semibold text-slate-600 transition hover:bg-[#f4f7f5] disabled:opacity-60"
             >
               <Icon name="arrow" className={`h-3 w-3 ${isLoading ? "animate-spin" : ""}`} />
               {isLoading ? "Refreshing..." : "Refresh"}
@@ -222,7 +222,7 @@ export function AdminKycQueue({ items = [] }: AdminKycQueueProps) {
             Review identity documents and resolve KYC verification submissions.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden shrink-0">
           {filters.map((item) => {
             const count = filterCounts[item];
             return (
@@ -230,7 +230,7 @@ export function AdminKycQueue({ items = [] }: AdminKycQueueProps) {
                 key={item}
                 type="button"
                 onClick={() => setSelectedFilter(item)}
-                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold transition ${
                   selectedFilter === item
                     ? "bg-[#0f7b36] text-white"
                     : "bg-[#f4f7f5] text-slate-600 hover:bg-[#eaf4ed]"

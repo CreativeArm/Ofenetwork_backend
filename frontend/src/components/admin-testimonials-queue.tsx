@@ -157,7 +157,7 @@ export function AdminTestimonialsQueue({ items = [] }: AdminTestimonialsQueuePro
     <>
       <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-3">
             <h3 className="whitespace-nowrap text-xl font-semibold">Moderation Queue ({testimonials.length})</h3>
             <button
               type="button"
@@ -173,21 +173,21 @@ export function AdminTestimonialsQueue({ items = [] }: AdminTestimonialsQueuePro
             Approve reviews for the public storefront or reject inappropriate submissions.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {filters.map((filter) => {
-            const count = filterCounts[filter];
+        <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden shrink-0">
+          {filters.map((item) => {
+            const count = filterCounts[item];
             return (
               <button
-                key={filter}
+                key={item}
                 type="button"
-                onClick={() => setSelectedFilter(filter)}
-                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-                  selectedFilter === filter
+                onClick={() => setSelectedFilter(item)}
+                className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold transition ${
+                  selectedFilter === item
                     ? "bg-[#0f7b36] text-white"
                     : "bg-[#f4f7f5] text-slate-600 hover:bg-[#eaf4ed]"
                 }`}
               >
-                {filter === "All" ? filter : statusLabel(filter)} {count > 0 ? `(${count})` : "(0)"}
+                {item === "All" ? item : statusLabel(item)} {count > 0 ? `(${count})` : "(0)"}
               </button>
             );
           })}

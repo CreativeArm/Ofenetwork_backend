@@ -9,9 +9,11 @@ import {
   fetchAdminBuy4MeOrders,
   fetchAdminDashboardMetrics,
   fetchAdminTransactions,
+  fetchAdminUsers,
   formatCurrency,
   formatRelativeTime,
   getCachedApi,
+  type BackendAdminUser,
   type BackendBuy4MeOrder,
   type BackendDashboardMetrics,
   type BackendTransaction,
@@ -197,6 +199,9 @@ export function AdminDashboardWorkspace() {
   const [transactions, setTransactions] = useState<BackendTransaction[]>(
     () => getCachedApi<BackendTransaction[]>("/transactions") ?? [],
   );
+  const [users, setUsers] = useState<BackendAdminUser[]>(
+    () => getCachedApi<BackendAdminUser[]>("/admin/search-users?query=") ?? [],
+  );
   const [buy4meOrders, setBuy4meOrders] = useState<BackendBuy4MeOrder[]>(
     () => getCachedApi<BackendBuy4MeOrder[]>("/buy4me") ?? [],
   );
@@ -206,17 +211,19 @@ export function AdminDashboardWorkspace() {
   });
 
   const loadData = async (silent = false) => {
-    // Fire ALL 4 requests in parallel — dashboard metrics + secondary data
+    // Fire ALL requests in parallel — dashboard metrics + secondary data
     if (!silent && !dashboardData) setIsLoading(true);
     try {
-      const [dashRes, txRes, b4mRes] = await Promise.allSettled([
+      const [dashRes, txRes, b4mRes, usersRes] = await Promise.allSettled([
         fetchAdminDashboardMetrics(),
         fetchAdminTransactions(),
         fetchAdminBuy4MeOrders(),
+        fetchAdminUsers(),
       ]);
       if (dashRes.status === "fulfilled") setDashboardData(dashRes.value);
       if (txRes.status === "fulfilled") setTransactions(txRes.value);
       if (b4mRes.status === "fulfilled") setBuy4meOrders(b4mRes.value);
+      if (usersRes.status === "fulfilled") setUsers(usersRes.value);
     } catch {
       // Keep stale state
     } finally {
@@ -275,7 +282,17 @@ export function AdminDashboardWorkspace() {
     buy4meStatusBreakdown.reduce((sum, item) => sum + item.value, 0);
   const pieGradient = buildPieGradient(buy4meStatusBreakdown);
 
-  const totalUsersCount = dashboardData?.totalUsers ?? 0;
+  const verifiedFromUsers = users.filter((u) => u.kycStatus === "APPROVED").length;
+  const unverifiedFromUsers = users.filter((u) => u.kycStatus !== "APPROVED").length;
+
+  const totalUsersCount =
+    dashboardData?.totalUsers ?? (users.length > 0 ? users.length : 0);
+  const verifiedUsersCount =
+    dashboardData?.verifiedUsers ?? verifiedFromUsers;
+  const unverifiedUsersCount =
+    dashboardData?.unverifiedUsers ??
+    (totalUsersCount > 0 ? Math.max(0, totalUsersCount - verifiedUsersCount) : unverifiedFromUsers);
+
   const totalTransactionsCount = dashboardData?.totalTransactions ?? transactions.length;
   const totalDepositsVolume =
     dashboardData?.totalDeposits ??
@@ -288,7 +305,6 @@ export function AdminDashboardWorkspace() {
       .filter((t) => t.type === "WITHDRAWAL" && t.status === "CONFIRMED")
       .reduce((sum, t) => sum + (t.nairaEquivalent || 0), 0);
 
-  const verifiedUsersCount = dashboardData?.verifiedUsers ?? 0;
   const pendingTransactionsCount =
     dashboardData?.pendingRequests ??
     transactions.filter((t) => t.status === "PENDING").length;
@@ -297,7 +313,7 @@ export function AdminDashboardWorkspace() {
     {
       label: "Total Users",
       value: totalUsersCount.toLocaleString(),
-      trend: `${verifiedUsersCount} verified`,
+      trend: `${verifiedUsersCount} verified · ${unverifiedUsersCount} unverified`,
       tint: metricTints[0],
     },
     {
@@ -350,21 +366,29 @@ export function AdminDashboardWorkspace() {
         ) as "Completed" | "Rejected" | "Pending",
       }));
 
-  const recentUsersData = dashboardData?.recentUsers?.length
-    ? dashboardData.recentUsers.map((user) => ({
-        name: user.fullName || "Unnamed User",
-        email: user.email,
-        status:
-          user.kycStatus === "APPROVED"
-            ? "Verified"
-            : user.kycStatus === "PENDING"
-              ? "KYC Pending"
-              : user.kycStatus === "REJECTED"
-                ? "KYC Rejected"
-                : "Unverified",
-        time: user.createdAt ? formatRelativeTime(user.createdAt) : "Recently",
-      }))
-    : [];
+  const recentUsersData = (
+    dashboardData?.recentUsers?.length
+      ? dashboardData.recentUsers
+      : users.slice(0, 5)
+  ).map((user) => {
+    const isApproved = user.kycStatus === "APPROVED";
+    const isPending = user.kycStatus === "PENDING";
+    const isRejected = user.kycStatus === "REJECTED";
+    return {
+      id: user.id,
+      name: user.fullName || "Unnamed User",
+      email: user.email,
+      status: isApproved
+        ? "Verified"
+        : isPending
+          ? "KYC Pending"
+          : isRejected
+            ? "KYC Rejected"
+            : "Unverified",
+      isVerified: isApproved,
+      time: user.createdAt ? formatRelativeTime(user.createdAt) : "Recently",
+    };
+  });
 
   const pendingDeposits =
     dashboardData?.pendingDeposits ??
@@ -382,14 +406,14 @@ export function AdminDashboardWorkspace() {
     buy4meOrders.filter(
       (item) => item.status !== "COMPLETED" && item.status !== "CANCELLED",
     ).length;
-  const unverifiedUsersCount = dashboardData?.unverifiedUsers ?? 0;
 
   const liveSystemSummary = [
-    { label: "Pending KYC Reviews", value: pendingKycCount, href: "/admin/kyc" },
-    { label: "Pending Deposits", value: pendingDeposits, href: "/admin/transactions" },
-    { label: "Pending Withdrawals", value: pendingWithdrawals, href: "/admin/transactions" },
-    { label: "Active Buy 4 Me Orders", value: pendingBuy4MeCount, href: "/admin/buy4me" },
-    { label: "Unverified Users", value: unverifiedUsersCount, href: "/admin/users" },
+    { label: "Verified Users", value: verifiedUsersCount, href: "/admin/users", tone: "success" },
+    { label: "Unverified Users", value: unverifiedUsersCount, href: "/admin/users", tone: "warning" },
+    { label: "Pending KYC Reviews", value: pendingKycCount, href: "/admin/kyc", tone: "warning" },
+    { label: "Pending Deposits", value: pendingDeposits, href: "/admin/transactions", tone: "warning" },
+    { label: "Pending Withdrawals", value: pendingWithdrawals, href: "/admin/transactions", tone: "warning" },
+    { label: "Active Buy 4 Me Orders", value: pendingBuy4MeCount, href: "/admin/buy4me", tone: "neutral" },
   ];
 
   return (
@@ -459,7 +483,20 @@ export function AdminDashboardWorkspace() {
                 </p>
               </div>
             </div>
-            <p className="mt-3 truncate text-xs font-semibold text-[#0f7b36]">{metric.trend}</p>
+            {metric.label === "Total Users" ? (
+              <div className="mt-3 flex flex-wrap items-center gap-1.5 text-xs font-semibold">
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-[#0f7b36] border border-emerald-200">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#0f7b36]" />
+                  {verifiedUsersCount} Verified
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700 border border-amber-200">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                  {unverifiedUsersCount} Unverified
+                </span>
+              </div>
+            ) : (
+              <p className="mt-3 truncate text-xs font-semibold text-[#0f7b36]">{metric.trend}</p>
+            )}
           </AdminCard>
         ))}
       </div>
@@ -673,7 +710,11 @@ export function AdminDashboardWorkspace() {
                   <span className="text-slate-600">{item.label}</span>
                   <span
                     className={`font-semibold rounded-full px-2.5 py-0.5 text-xs ${
-                      item.value > 0 ? "bg-amber-100 text-amber-800 font-bold" : "bg-slate-100 text-slate-700"
+                      item.tone === "success"
+                        ? "bg-emerald-100 text-[#0f7b36] font-bold"
+                        : item.value > 0
+                          ? "bg-amber-100 text-amber-800 font-bold"
+                          : "bg-slate-100 text-slate-700"
                     }`}
                   >
                     {item.value}
@@ -709,31 +750,58 @@ export function AdminDashboardWorkspace() {
               {recentUsersData.length > 0 ? (
                 recentUsersData.map((user) => (
                   <div
-                    key={user.email}
-                    className="flex items-center justify-between gap-3 rounded-2xl border border-[#f0f4f1] p-3"
+                    key={user.id || user.email}
+                    className="flex items-center justify-between gap-3 rounded-2xl border border-[#f0f4f1] p-3 transition hover:bg-[#fbfcfb]"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-sm font-semibold text-emerald-800">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-sm font-semibold text-emerald-800">
                         {user.name.charAt(0)}
+                        {user.isVerified ? (
+                          <span
+                            className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#0f7b36] text-[9px] font-bold text-white ring-2 ring-white"
+                            title="Verified Account"
+                          >
+                            ✓
+                          </span>
+                        ) : (
+                          <span
+                            className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[9px] font-bold text-white ring-2 ring-white"
+                            title="Unverified Account"
+                          >
+                            !
+                          </span>
+                        )}
                       </div>
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900">{user.name}</p>
-                        <p className="text-xs text-slate-500">{user.email}</p>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <p className="truncate text-sm font-semibold text-slate-900">{user.name}</p>
+                          {user.isVerified ? (
+                            <span className="shrink-0 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-[#0f7b36]">
+                              Verified
+                            </span>
+                          ) : (
+                            <span className="shrink-0 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                              Unverified
+                            </span>
+                          )}
+                        </div>
+                        <p className="truncate text-xs text-slate-500">{user.email}</p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p
-                        className={`text-xs font-semibold ${
+                    <div className="text-right shrink-0">
+                      <AdminStatusBadge
+                        label={user.status}
+                        tone={
                           user.status === "Verified"
-                            ? "text-[#0f7b36]"
+                            ? "success"
                             : user.status === "KYC Pending"
-                              ? "text-amber-600"
-                              : "text-slate-500"
-                        }`}
-                      >
-                        {user.status}
-                      </p>
-                      <p className="text-[11px] text-slate-400">{user.time}</p>
+                              ? "warning"
+                              : user.status === "KYC Rejected"
+                                ? "danger"
+                                : "neutral"
+                        }
+                      />
+                      <p className="mt-1 text-[11px] text-slate-400">{user.time}</p>
                     </div>
                   </div>
                 ))
