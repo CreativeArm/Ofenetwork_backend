@@ -32,6 +32,7 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bodyParser: false,
   });
+  app.set("trust proxy", 1);
   const redisService = app.get(RedisService);
   const emailService = app.get(EmailService);
 
