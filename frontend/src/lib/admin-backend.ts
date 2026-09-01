@@ -50,6 +50,23 @@ export interface BackendDashboardMetrics {
     metadata?: unknown;
     createdAt: string;
   }>;
+  recentTransactions?: Array<{
+    id: string;
+    userId: string;
+    userFullName?: string;
+    userEmail?: string;
+    userKycStatus?: string;
+    type: string;
+    service: string;
+    amount: number;
+    currency: "NGN" | "USD";
+    nairaEquivalent: number;
+    status: "PENDING" | "CONFIRMED" | "REJECTED";
+    reference?: string;
+    proofOfPaymentUrl?: string;
+    destinationDetails?: Record<string, string>;
+    createdAt: string;
+  }>;
 }
 
 export interface BackendTransaction {

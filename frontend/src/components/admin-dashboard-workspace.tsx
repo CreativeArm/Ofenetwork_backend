@@ -19,6 +19,38 @@ import {
   type BackendTransaction,
 } from "../lib/admin-backend";
 import { quickActions, testimonials } from "../lib/mock-data";
+import { useBodyScrollLock } from "../lib/use-body-scroll-lock";
+
+export interface DashboardRecentTransaction {
+  id: string;
+  userId: string;
+  user: string;
+  userEmail?: string;
+  userKycStatus?: string;
+  service: string;
+  type: string;
+  amount: string;
+  nairaAmount: string;
+  currency: string;
+  rawAmount: number;
+  rawNaira: number;
+  rawStatus: "PENDING" | "CONFIRMED" | "REJECTED";
+  status: "Approved" | "Pending" | "Rejected";
+  time: string;
+  fullDate: string;
+  reference?: string;
+  proofOfPaymentUrl?: string;
+  destinationDetails?: Record<string, string>;
+}
+
+function formatDetailKey(key: string) {
+  return key
+    .replace(/([A-Z])/g, " $1")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
 
 const metricTints = ["emerald", "violet", "sky", "amber", "pink"] as const;
 
@@ -209,6 +241,18 @@ export function AdminDashboardWorkspace() {
   const [isLoading, setIsLoading] = useState(() => {
     return !getCachedApi<BackendDashboardMetrics>("/admin/dashboard");
   });
+  const [selectedTx, setSelectedTx] = useState<DashboardRecentTransaction | null>(null);
+  const [copiedRef, setCopiedRef] = useState(false);
+
+  useBodyScrollLock(Boolean(selectedTx));
+
+  const handleCopyRef = (text: string) => {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      setCopiedRef(true);
+      setTimeout(() => setCopiedRef(false), 2000);
+    }
+  };
 
   const loadData = async (silent = false) => {
     // Fire ALL requests in parallel — dashboard metrics + secondary data
@@ -342,29 +386,79 @@ export function AdminDashboardWorkspace() {
     },
   ];
 
-  // Use recentActivities from dashboard metrics (already fetched) instead of
-  // requiring the full transactions list — much faster first render.
-  const recentTransactions = dashboardData?.recentActivities?.length
-    ? dashboardData.recentActivities.slice(0, 5).map((entry) => ({
-        id: entry.id,
-        service: entry.action.replace(/_/g, " "),
-        meta: entry.entityType,
-        amount: "",
-        status: "Completed" as const,
-      }))
-    : transactions.slice(0, 5).map((item) => ({
+  const userMap = useMemo(() => {
+    return new Map(users.map((u) => [u.id, u]));
+  }, [users]);
+
+  const recentTransactions: DashboardRecentTransaction[] = useMemo(() => {
+    // Prefer full transactions list if loaded, otherwise fallback to dashboardData.recentTransactions
+    const sourceList =
+      transactions.length > 0
+        ? transactions.slice(0, 6)
+        : (dashboardData?.recentTransactions ?? []);
+
+    return sourceList.map((item) => {
+      const user = userMap.get(item.userId);
+      const userFullName = item.userFullName || user?.fullName || "User";
+      const userEmail = item.userEmail || user?.email;
+      const userKycStatus =
+        (item as { userKycStatus?: string }).userKycStatus ||
+        user?.kycStatus ||
+        "UNVERIFIED";
+
+      const isConfirmed = item.status === "CONFIRMED";
+      const isRejected = item.status === "REJECTED";
+      const statusLabel: "Approved" | "Pending" | "Rejected" = isConfirmed
+        ? "Approved"
+        : isRejected
+          ? "Rejected"
+          : "Pending";
+
+      const formattedNaira = formatCurrency(item.nairaEquivalent);
+      const formattedAmount =
+        item.currency === "USD"
+          ? `$${item.amount.toLocaleString()}`
+          : formattedNaira;
+
+      const typeLabel =
+        item.type === "DEPOSIT"
+          ? "Deposit"
+          : item.type === "WITHDRAWAL"
+            ? "Withdrawal"
+            : item.type === "BUY4ME_PAYMENT"
+              ? "Buy4Me Payment"
+              : item.type === "WALLET_CREDIT"
+                ? "Wallet Credit"
+                : item.type;
+
+      return {
         id: item.id,
-        service: item.type === "DEPOSIT" ? `Deposit — ${item.service}` : `Withdrawal — ${item.service}`,
-        meta: item.service,
-        amount: formatCurrency(item.nairaEquivalent),
-        status: (
-          item.status === "CONFIRMED"
-            ? "Completed"
-            : item.status === "REJECTED"
-              ? "Rejected"
-              : "Pending"
-        ) as "Completed" | "Rejected" | "Pending",
-      }));
+        userId: item.userId,
+        user: userFullName,
+        userEmail,
+        userKycStatus,
+        service: item.service || "Service",
+        type: typeLabel,
+        amount: formattedAmount,
+        nairaAmount: formattedNaira,
+        currency: item.currency,
+        rawAmount: item.amount,
+        rawNaira: item.nairaEquivalent,
+        rawStatus: item.status as "PENDING" | "CONFIRMED" | "REJECTED",
+        status: statusLabel,
+        time: item.createdAt ? formatRelativeTime(item.createdAt) : "Recently",
+        fullDate: item.createdAt
+          ? new Date(item.createdAt).toLocaleString("en-NG", {
+              dateStyle: "medium",
+              timeStyle: "short",
+            })
+          : "Recently",
+        reference: item.reference,
+        proofOfPaymentUrl: item.proofOfPaymentUrl,
+        destinationDetails: item.destinationDetails,
+      };
+    });
+  }, [transactions, dashboardData?.recentTransactions, userMap]);
 
   const recentUsersData = (
     dashboardData?.recentUsers?.length
@@ -631,37 +725,72 @@ export function AdminDashboardWorkspace() {
             </div>
             <div className="space-y-3">
               {recentTransactions.length > 0 ? (
-                recentTransactions.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex items-start justify-between gap-3 rounded-2xl border border-[#f0f4f1] p-3 transition-colors hover:bg-[#fbfdfb]"
-                  >
-                    <div className="flex gap-3">
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
-                        <Icon name="arrow" className="h-4 w-4" />
-                      </span>
-                      <div>
-                        <p className="text-sm font-semibold text-slate-800">{item.service}</p>
-                        <p className="text-xs text-slate-500">{item.meta}</p>
+                recentTransactions.map((item) => {
+                  const isDeposit = item.type.toLowerCase().includes("deposit");
+                  const isWithdrawal = item.type.toLowerCase().includes("withdrawal");
+
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setSelectedTx(item)}
+                      className="group flex w-full cursor-pointer items-center justify-between gap-3 rounded-2xl border border-[#f0f4f1] bg-white p-3.5 text-left transition-all duration-200 hover:border-emerald-300 hover:bg-[#fbfdfb] hover:shadow-xs focus:outline-hidden focus:ring-2 focus:ring-[#0f7b36]/20"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span
+                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl transition-transform duration-200 group-hover:scale-105 ${
+                            isDeposit
+                              ? "bg-emerald-50 text-[#0f7b36]"
+                              : isWithdrawal
+                                ? "bg-amber-50 text-amber-600"
+                                : "bg-violet-50 text-violet-600"
+                          }`}
+                        >
+                          <Icon
+                            name={isDeposit ? "bank" : isWithdrawal ? "swap" : "bag"}
+                            className={`h-4 w-4 ${isWithdrawal ? "rotate-90" : ""}`}
+                          />
+                        </span>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <p className="truncate text-sm font-semibold text-slate-900 group-hover:text-[#0f7b36] transition-colors">
+                              {item.service} — {item.type}
+                            </p>
+                            <span className="shrink-0 font-mono text-[11px] text-slate-400">
+                              #{item.id.slice(-6)}
+                            </span>
+                          </div>
+                          <div className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500">
+                            <span className="truncate font-medium text-slate-700 max-w-[120px] sm:max-w-[160px]">
+                              {item.user}
+                            </span>
+                            <span>•</span>
+                            <span className="shrink-0 text-slate-400">{item.time}</span>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-semibold text-slate-900">{item.amount}</p>
-                      <div className="mt-1">
-                        <AdminStatusBadge
-                          label={item.status}
-                          tone={
-                            item.status === "Completed"
-                              ? "success"
-                              : item.status === "Rejected"
-                                ? "danger"
-                                : "warning"
-                          }
-                        />
+
+                      <div className="text-right shrink-0">
+                        <p className="text-sm font-bold text-slate-900">{item.amount}</p>
+                        <div className="mt-1 flex items-center justify-end gap-1.5">
+                          <AdminStatusBadge
+                            label={item.status}
+                            tone={
+                              item.status === "Approved"
+                                ? "success"
+                                : item.status === "Rejected"
+                                  ? "danger"
+                                  : "warning"
+                            }
+                          />
+                          <span className="text-xs text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                            →
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                ))
+                    </button>
+                  );
+                })
               ) : (
                 <p className="py-4 text-center text-sm text-slate-500">No transactions recorded yet.</p>
               )}
@@ -812,6 +941,228 @@ export function AdminDashboardWorkspace() {
           </AdminCard>
         </div>
       </div>
+
+      {selectedTx ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-[3px] animate-in fade-in duration-200"
+          onClick={() => setSelectedTx(null)}
+        >
+          <div
+            className="relative flex max-h-[90vh] w-full max-w-[540px] flex-col overflow-hidden rounded-[28px] border border-[#dbe5df] bg-white shadow-[0_25px_70px_rgba(15,23,32,0.25)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-[#eef3f0] px-6 py-4">
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-[#0f7b36]">
+                  Transaction Review
+                </span>
+                <span className="font-mono text-xs text-slate-400">
+                  #{selectedTx.id.slice(-8)}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedTx(null)}
+                className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition hover:bg-[#f2f6f3] hover:text-slate-700"
+                aria-label="Close modal"
+              >
+                <Icon name="x" className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Scrollable Modal Content */}
+            <div className="space-y-5 overflow-y-auto p-6">
+              {/* Summary Card */}
+              <div className="rounded-[22px] border border-[#e5ece7] bg-[#f8fbf8] p-4 text-center">
+                <div className="flex items-center justify-center gap-2">
+                  <AdminStatusBadge
+                    label={selectedTx.status}
+                    tone={
+                      selectedTx.status === "Approved"
+                        ? "success"
+                        : selectedTx.status === "Rejected"
+                          ? "danger"
+                          : "warning"
+                    }
+                  />
+                  <span className="text-xs text-slate-400">•</span>
+                  <span className="text-xs font-semibold text-slate-600">
+                    {selectedTx.service} — {selectedTx.type}
+                  </span>
+                </div>
+                <div className="mt-2 text-2xl font-bold tracking-tight text-slate-900">
+                  {selectedTx.amount}
+                </div>
+                {selectedTx.currency === "USD" ? (
+                  <p className="mt-0.5 text-xs font-medium text-slate-500">
+                    Equivalent: {selectedTx.nairaAmount}
+                  </p>
+                ) : null}
+                <p className="mt-2 text-[11px] text-slate-400">
+                  Submitted {selectedTx.fullDate} ({selectedTx.time})
+                </p>
+              </div>
+
+              {/* User Information */}
+              <div className="rounded-[20px] border border-[#eef3f0] bg-white p-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Customer Information
+                  </h4>
+                  <Link
+                    href={`/admin/users?query=${encodeURIComponent(selectedTx.userEmail || selectedTx.user)}`}
+                    className="text-xs font-semibold text-[#0f7b36] hover:underline"
+                  >
+                    View in Directory →
+                  </Link>
+                </div>
+                <div className="mt-3 flex items-center gap-3">
+                  <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-sm font-bold text-emerald-800">
+                    {selectedTx.user.charAt(0)}
+                    {selectedTx.userKycStatus === "APPROVED" ? (
+                      <span
+                        className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#0f7b36] text-[9px] font-bold text-white ring-2 ring-white"
+                        title="Verified Account"
+                      >
+                        ✓
+                      </span>
+                    ) : (
+                      <span
+                        className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[9px] font-bold text-white ring-2 ring-white"
+                        title="Unverified Account"
+                      >
+                        !
+                      </span>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate text-sm font-semibold text-slate-900">
+                        {selectedTx.user}
+                      </p>
+                      {selectedTx.userKycStatus === "APPROVED" ? (
+                        <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-[#0f7b36]">
+                          Verified
+                        </span>
+                      ) : (
+                        <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                          Unverified
+                        </span>
+                      )}
+                    </div>
+                    <p className="truncate text-xs text-slate-500">
+                      {selectedTx.userEmail || "No email on record"}
+                    </p>
+                    <p className="mt-0.5 font-mono text-[11px] text-slate-400">
+                      User ID: {selectedTx.userId}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Transaction & Submitted Details */}
+              <div className="rounded-[20px] border border-[#eef3f0] bg-white p-4">
+                <h4 className="border-b border-slate-100 pb-3 text-xs font-bold uppercase tracking-wider text-slate-400">
+                  Submitted Details
+                </h4>
+                <dl className="mt-3 divide-y divide-slate-100 text-xs">
+                  <div className="flex items-center justify-between py-2">
+                    <dt className="font-medium text-slate-500">Transaction ID</dt>
+                    <dd className="font-mono text-slate-800">{selectedTx.id}</dd>
+                  </div>
+                  {selectedTx.reference ? (
+                    <div className="flex items-center justify-between py-2">
+                      <dt className="font-medium text-slate-500">Reference</dt>
+                      <dd className="flex items-center gap-1.5 font-mono text-slate-800">
+                        {selectedTx.reference}
+                        <button
+                          type="button"
+                          onClick={() => handleCopyRef(selectedTx.reference!)}
+                          className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 hover:bg-slate-100"
+                        >
+                          {copiedRef ? "Copied!" : "Copy"}
+                        </button>
+                      </dd>
+                    </div>
+                  ) : null}
+                  <div className="flex items-center justify-between py-2">
+                    <dt className="font-medium text-slate-500">Service / Type</dt>
+                    <dd className="font-semibold text-slate-800">
+                      {selectedTx.service} ({selectedTx.type})
+                    </dd>
+                  </div>
+                  <div className="flex items-center justify-between py-2">
+                    <dt className="font-medium text-slate-500">Gross Amount</dt>
+                    <dd className="font-bold text-slate-900">{selectedTx.amount}</dd>
+                  </div>
+                  {selectedTx.currency === "USD" ? (
+                    <div className="flex items-center justify-between py-2">
+                      <dt className="font-medium text-slate-500">Naira Equivalent</dt>
+                      <dd className="font-semibold text-[#0f7b36]">{selectedTx.nairaAmount}</dd>
+                    </div>
+                  ) : null}
+
+                  {selectedTx.destinationDetails &&
+                    Object.entries(selectedTx.destinationDetails)
+                      .filter(([key, val]) => val && key !== "bonusCreditBreakdown")
+                      .map(([key, val]) => (
+                        <div key={key} className="flex items-center justify-between py-2">
+                          <dt className="font-medium text-slate-500">{formatDetailKey(key)}</dt>
+                          <dd className="max-w-[240px] truncate text-right font-semibold text-slate-800" title={val}>
+                            {val}
+                          </dd>
+                        </div>
+                      ))}
+                </dl>
+              </div>
+
+              {/* Proof of Payment (if available) */}
+              {selectedTx.proofOfPaymentUrl ? (
+                <div className="rounded-[20px] border border-[#eef3f0] bg-white p-4">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                      Proof of Payment
+                    </h4>
+                    <a
+                      href={selectedTx.proofOfPaymentUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs font-semibold text-[#0f7b36] hover:underline"
+                    >
+                      Open Full Size ↗
+                    </a>
+                  </div>
+                  <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                    <img
+                      src={selectedTx.proofOfPaymentUrl}
+                      alt="Proof of payment"
+                      className="max-h-56 w-full object-contain p-2"
+                    />
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            {/* Modal Footer Actions */}
+            <div className="flex items-center justify-between border-t border-[#eef3f0] bg-[#fbfdfb] px-6 py-4">
+              <Link
+                href="/admin/transactions"
+                className="rounded-xl border border-[#dbe5df] bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition hover:bg-[#f4f7f5]"
+              >
+                Go to Review Queue
+              </Link>
+              <button
+                type="button"
+                onClick={() => setSelectedTx(null)}
+                className="rounded-xl bg-[#0f7b36] px-5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-[#0c622b]"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

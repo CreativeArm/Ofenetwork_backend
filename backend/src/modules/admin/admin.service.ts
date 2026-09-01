@@ -87,6 +87,23 @@ export interface DashboardMetrics {
     metadata?: unknown;
     createdAt: string;
   }>;
+  recentTransactions?: Array<{
+    id: string;
+    userId: string;
+    userFullName?: string;
+    userEmail?: string;
+    userKycStatus?: string;
+    type: string;
+    service: string;
+    amount: number;
+    currency: string;
+    nairaEquivalent: number;
+    status: string;
+    reference?: string;
+    proofOfPaymentUrl?: string;
+    destinationDetails?: Record<string, string>;
+    createdAt: string;
+  }>;
 }
 
 function monthKey(date: Date) {
@@ -197,6 +214,7 @@ export class AdminService {
       monthlyBuy4MeOrders,
       buy4MeStatusCounts,
       recentActivities,
+      recentTransactionsRaw,
     ] = await Promise.all([
       this.prisma.user.count({ where: { role: "USER" } }),
       this.prisma.transaction.count(),
@@ -294,6 +312,19 @@ export class AdminService {
         orderBy: { createdAt: "desc" },
         take: 10,
       }),
+      this.prisma.transaction.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 10,
+        include: {
+          user: {
+            select: {
+              fullName: true,
+              email: true,
+              kycStatus: true,
+            },
+          },
+        },
+      }),
     ]);
 
     const totalDeposits = depositAggregate._sum.nairaEquivalent?.toNumber() ?? 0;
@@ -335,6 +366,24 @@ export class AdminService {
         email: u.email,
         kycStatus: u.kycStatus,
         createdAt: u.createdAt.toISOString(),
+      })),
+      recentTransactions: recentTransactionsRaw.map((tx) => ({
+        id: tx.id,
+        userId: tx.userId,
+        userFullName: tx.user?.fullName ?? undefined,
+        userEmail: tx.user?.email ?? undefined,
+        userKycStatus: tx.user?.kycStatus ?? undefined,
+        type: tx.type,
+        service: tx.service,
+        amount: tx.amount.toNumber(),
+        currency: tx.currency,
+        nairaEquivalent: tx.nairaEquivalent.toNumber(),
+        status: tx.status,
+        reference: tx.reference ?? undefined,
+        proofOfPaymentUrl: tx.proofOfPaymentUrl ?? undefined,
+        destinationDetails:
+          (tx.destinationDetails as Record<string, string> | null) ?? undefined,
+        createdAt: tx.createdAt.toISOString(),
       })),
       monthlyOverview: buildMonthlyOverview(
         monthlyStart,

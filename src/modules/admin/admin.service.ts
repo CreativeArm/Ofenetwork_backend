@@ -52,6 +52,19 @@ export interface DashboardMetrics {
   totalTransactions: number;
   totalBuy4MeOrders: number;
   pendingRequests: number;
+  pendingDeposits: number;
+  pendingWithdrawals: number;
+  pendingBuy4Me: number;
+  unverifiedUsers: number;
+  pendingKycCount: number;
+  verifiedUsers: number;
+  recentUsers: Array<{
+    id: string;
+    fullName: string;
+    email: string;
+    kycStatus: string;
+    createdAt: string;
+  }>;
   monthlyOverview: Array<{
     key: string;
     label: string;
@@ -72,6 +85,23 @@ export interface DashboardMetrics {
     entityType: string;
     entityId: string;
     metadata?: unknown;
+    createdAt: string;
+  }>;
+  recentTransactions?: Array<{
+    id: string;
+    userId: string;
+    userFullName?: string;
+    userEmail?: string;
+    userKycStatus?: string;
+    type: string;
+    service: string;
+    amount: number;
+    currency: string;
+    nairaEquivalent: number;
+    status: string;
+    reference?: string;
+    proofOfPaymentUrl?: string;
+    destinationDetails?: Record<string, string>;
     createdAt: string;
   }>;
 }
@@ -171,71 +201,134 @@ export class AdminService {
       totalUsers,
       totalTransactions,
       pendingRequests,
-      confirmedTransactions,
+      pendingDeposits,
+      pendingWithdrawals,
+      pendingBuy4Me,
+      unverifiedUsers,
+      pendingKycCount,
+      verifiedUsers,
+      recentUsersRaw,
+      depositAggregate,
+      withdrawalAggregate,
       monthlyTransactions,
       monthlyBuy4MeOrders,
       buy4MeStatusCounts,
       recentActivities,
+      recentTransactionsRaw,
     ] = await Promise.all([
-        this.prisma.user.count(),
-        this.prisma.transaction.count(),
-        this.prisma.transaction.count({
-          where: { status: "PENDING" },
-        }),
-        this.prisma.transaction.findMany({
-          where: {
-            status: "CONFIRMED",
-            type: {
-              in: ["DEPOSIT", "WITHDRAWAL"],
+      this.prisma.user.count({ where: { role: "USER" } }),
+      this.prisma.transaction.count(),
+      this.prisma.transaction.count({
+        where: { status: "PENDING" },
+      }),
+      this.prisma.transaction.count({
+        where: { status: "PENDING", type: "DEPOSIT" },
+      }),
+      this.prisma.transaction.count({
+        where: { status: "PENDING", type: "WITHDRAWAL" },
+      }),
+      this.prisma.buy4MeOrder.count({
+        where: {
+          status: {
+            in: [
+              "PROCESSING",
+              "PAYMENT_SUBMITTED",
+              "PURCHASING",
+              "AWAITING_PAYMENT",
+              "ISSUE",
+            ],
+          },
+        },
+      }),
+      this.prisma.user.count({
+        where: { role: "USER", kycStatus: { not: "APPROVED" } },
+      }),
+      this.prisma.user.count({
+        where: { role: "USER", kycStatus: "PENDING" },
+      }),
+      this.prisma.user.count({
+        where: { role: "USER", kycStatus: "APPROVED" },
+      }),
+      this.prisma.user.findMany({
+        where: { role: "USER" },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+          kycStatus: true,
+          createdAt: true,
+        },
+      }),
+      this.prisma.transaction.aggregate({
+        where: {
+          status: "CONFIRMED",
+          type: "DEPOSIT",
+        },
+        _sum: {
+          nairaEquivalent: true,
+        },
+      }),
+      this.prisma.transaction.aggregate({
+        where: {
+          status: "CONFIRMED",
+          type: "WITHDRAWAL",
+        },
+        _sum: {
+          nairaEquivalent: true,
+        },
+      }),
+      this.prisma.transaction.findMany({
+        where: {
+          createdAt: { gte: monthlyStart },
+          status: "CONFIRMED",
+          type: {
+            in: ["DEPOSIT", "WITHDRAWAL"],
+          },
+        },
+        select: {
+          type: true,
+          nairaEquivalent: true,
+          createdAt: true,
+        },
+      }),
+      this.prisma.buy4MeOrder.findMany({
+        where: {
+          createdAt: { gte: monthlyStart },
+          status: { not: "CANCELLED" },
+          totalCost: { not: null },
+        },
+        select: {
+          totalCost: true,
+          createdAt: true,
+        },
+      }),
+      this.prisma.buy4MeOrder.groupBy({
+        by: ["status"],
+        _count: { _all: true },
+      }),
+      this.prisma.auditLog.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 10,
+      }),
+      this.prisma.transaction.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 10,
+        include: {
+          user: {
+            select: {
+              fullName: true,
+              email: true,
+              kycStatus: true,
             },
           },
-          select: {
-            type: true,
-            nairaEquivalent: true,
-          },
-        }),
-        this.prisma.transaction.findMany({
-          where: {
-            createdAt: { gte: monthlyStart },
-            status: "CONFIRMED",
-            type: {
-              in: ["DEPOSIT", "WITHDRAWAL"],
-            },
-          },
-          select: {
-            type: true,
-            nairaEquivalent: true,
-            createdAt: true,
-          },
-        }),
-        this.prisma.buy4MeOrder.findMany({
-          where: {
-            createdAt: { gte: monthlyStart },
-            status: { not: "CANCELLED" },
-            totalCost: { not: null },
-          },
-          select: {
-            totalCost: true,
-            createdAt: true,
-          },
-        }),
-        this.prisma.buy4MeOrder.groupBy({
-          by: ["status"],
-          _count: { _all: true },
-        }),
-        this.prisma.auditLog.findMany({
-          orderBy: { createdAt: "desc" },
-          take: 10,
-        }),
-      ]);
+        },
+      }),
+    ]);
 
-    const totalDeposits = confirmedTransactions
-      .filter((item) => item.type === "DEPOSIT")
-      .reduce((sum, item) => sum + item.nairaEquivalent.toNumber(), 0);
-
-    const totalWithdrawals = confirmedTransactions
-      .filter((item) => item.type === "WITHDRAWAL")
-      .reduce((sum, item) => sum + item.nairaEquivalent.toNumber(), 0);
+    const totalDeposits = depositAggregate._sum.nairaEquivalent?.toNumber() ?? 0;
+    const totalWithdrawals = withdrawalAggregate._sum.nairaEquivalent?.toNumber() ?? 0;
 
     const statusCountMap = new Map<Buy4MeStatus, number>(
       buy4MeStatusCounts.map((item) => [item.status, item._count._all]),
@@ -261,6 +354,37 @@ export class AdminService {
       totalTransactions,
       totalBuy4MeOrders,
       pendingRequests,
+      pendingDeposits,
+      pendingWithdrawals,
+      pendingBuy4Me,
+      unverifiedUsers,
+      pendingKycCount,
+      verifiedUsers,
+      recentUsers: recentUsersRaw.map((u) => ({
+        id: u.id,
+        fullName: u.fullName,
+        email: u.email,
+        kycStatus: u.kycStatus,
+        createdAt: u.createdAt.toISOString(),
+      })),
+      recentTransactions: recentTransactionsRaw.map((tx) => ({
+        id: tx.id,
+        userId: tx.userId,
+        userFullName: tx.user?.fullName ?? undefined,
+        userEmail: tx.user?.email ?? undefined,
+        userKycStatus: tx.user?.kycStatus ?? undefined,
+        type: tx.type,
+        service: tx.service,
+        amount: tx.amount.toNumber(),
+        currency: tx.currency,
+        nairaEquivalent: tx.nairaEquivalent.toNumber(),
+        status: tx.status,
+        reference: tx.reference ?? undefined,
+        proofOfPaymentUrl: tx.proofOfPaymentUrl ?? undefined,
+        destinationDetails:
+          (tx.destinationDetails as Record<string, string> | null) ?? undefined,
+        createdAt: tx.createdAt.toISOString(),
+      })),
       monthlyOverview: buildMonthlyOverview(
         monthlyStart,
         monthlyTransactions,
@@ -278,7 +402,7 @@ export class AdminService {
       })),
     };
 
-    await this.redis.setJson(cacheKey, metrics, 30);
+    await this.redis.setJson(cacheKey, metrics, 300);
 
     return metrics;
   }
