@@ -4,6 +4,7 @@ import { PrismaService } from "../../database/prisma.service";
 import { RedisService } from "../../infrastructure/redis/redis.service";
 import { AuditService } from "../audit/audit.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { EmailService } from "../../infrastructure/email/email.service";
 import { SubmitKycDto } from "./dto/submit-kyc.dto";
 import { UpdateKycStatusDto } from "./dto/update-kyc-status.dto";
 
@@ -14,6 +15,7 @@ export class KycService {
     private readonly redis: RedisService,
     private readonly notificationsService: NotificationsService,
     private readonly auditService: AuditService,
+    private readonly emailService: EmailService,
   ) {}
 
   private serializeUser(user: {
@@ -89,6 +91,12 @@ export class KycService {
     await this.auditService.log(payload.userId, "KYC_SUBMITTED", "user", payload.userId, {
       documentType: payload.documentType,
     });
+    void this.emailService.sendAdminNewKycAlert({
+      userFullName: user.fullName,
+      userEmail: user.email,
+      documentType: payload.documentType,
+      userId: user.id,
+    });
     await this.clearCaches();
 
     return this.serializeUser(updatedUser);
@@ -126,6 +134,20 @@ export class KycService {
     await this.auditService.log(payload.actorId, `KYC_${nextStatus}`, "user", userId, {
       note: payload.note,
     });
+
+    if (nextStatus === KycStatus.APPROVED) {
+      void this.emailService.sendKycApprovedEmail({
+        to: user.email,
+        name: user.fullName,
+      });
+    } else if (nextStatus === KycStatus.REJECTED) {
+      void this.emailService.sendKycRejectedEmail({
+        to: user.email,
+        name: user.fullName,
+        reason: payload.note?.trim(),
+      });
+    }
+
     await this.clearCaches();
 
     return this.serializeUser(updatedUser);

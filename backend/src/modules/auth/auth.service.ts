@@ -645,6 +645,11 @@ export class AuthService {
     await this.walletService.createWallet(user.id);
     await this.redis.delete("admin:dashboard:metrics");
 
+    void this.emailService.sendWelcomeEmail({
+      to: user.email,
+      name: user.fullName,
+    });
+
     return this.buildAuthResponse(user);
   }
 

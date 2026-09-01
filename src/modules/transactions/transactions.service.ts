@@ -9,6 +9,7 @@ import { WalletService } from "../wallet/wallet.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { AuditService } from "../audit/audit.service";
 import { RatesService } from "../rates/rates.service";
+import { EmailService } from "../../infrastructure/email/email.service";
 
 @Injectable()
 export class TransactionsService {
@@ -19,6 +20,7 @@ export class TransactionsService {
     private readonly notificationsService: NotificationsService,
     private readonly auditService: AuditService,
     private readonly ratesService: RatesService,
+    private readonly emailService: EmailService,
   ) {}
 
   private normalizeAdminActionHistory(value: Prisma.JsonValue | null) {
@@ -185,6 +187,25 @@ export class TransactionsService {
       this.redis.delete("admin:dashboard:metrics"),
       this.redis.delete("admin:user-search:"),
     ]);
+
+    void this.prisma.user
+      .findUnique({
+        where: { id: payload.userId },
+        select: { fullName: true, email: true },
+      })
+      .then((user) => {
+        if (user?.email) {
+          void this.emailService.sendAdminNewTransactionAlert({
+            userFullName: user.fullName,
+            userEmail: user.email,
+            service: payload.service,
+            type: "Deposit",
+            amount: `₦${nairaEquivalent.toLocaleString()}`,
+            transactionId: transaction.id,
+          });
+        }
+      });
+
     return this.serializeTransaction(transaction);
   }
 
@@ -221,6 +242,25 @@ export class TransactionsService {
       this.redis.delete("admin:dashboard:metrics"),
       this.redis.delete("admin:user-search:"),
     ]);
+
+    void this.prisma.user
+      .findUnique({
+        where: { id: payload.userId },
+        select: { fullName: true, email: true },
+      })
+      .then((user) => {
+        if (user?.email) {
+          void this.emailService.sendAdminNewTransactionAlert({
+            userFullName: user.fullName,
+            userEmail: user.email,
+            service: payload.service,
+            type: "Withdrawal",
+            amount: `₦${nairaEquivalent.toLocaleString()}`,
+            transactionId: transaction.id,
+          });
+        }
+      });
+
     return this.serializeTransaction(transaction);
   }
 
@@ -297,6 +337,23 @@ export class TransactionsService {
     });
 
     return transactions.map((transaction) => this.serializeTransaction(transaction));
+  }
+
+  async getById(idOrReference: string) {
+    const transaction = await this.prisma.transaction.findFirst({
+      where: {
+        OR: [
+          { id: idOrReference },
+          { reference: idOrReference },
+        ],
+      },
+    });
+
+    if (!transaction) {
+      throw new NotFoundException(`Transaction '${idOrReference}' not found.`);
+    }
+
+    return this.serializeTransaction(transaction);
   }
 
   async updateStatus(transactionId: string, status: "CONFIRMED" | "REJECTED", actorId: string, note?: string) {
@@ -377,6 +434,26 @@ export class TransactionsService {
     );
     await this.auditService.log(actorId, status, "transaction", transaction.id, { note });
     await this.redis.delete("admin:dashboard:metrics");
+
+    void this.prisma.user
+      .findUnique({
+        where: { id: transaction.userId },
+        select: { fullName: true, email: true },
+      })
+      .then((txUser) => {
+        if (txUser?.email) {
+          void this.emailService.sendTransactionStatusEmail({
+            to: txUser.email,
+            name: txUser.fullName,
+            transactionId: transaction.id,
+            service: transaction.service,
+            type: transaction.type.replace(/_/g, " "),
+            amount: `₦${transaction.nairaEquivalent.toNumber().toLocaleString()}`,
+            status,
+            note,
+          });
+        }
+      });
 
     return this.serializeTransaction(updatedTransaction);
   }
