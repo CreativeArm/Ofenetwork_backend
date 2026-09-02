@@ -10,6 +10,7 @@ import {
 } from "../lib/admin-backend";
 import { homeRates, serviceConfigs, type ServiceConfig, type UserServiceSlug } from "../lib/mock-data";
 import { buildDepositDetails } from "../lib/transaction-details";
+import { uploadToCloudinary } from "../lib/upload-service";
 import { Icon } from "./icons";
 import { KycVerificationGate } from "./kyc-verification-gate";
 import { ServiceIcon } from "./service-icon";
@@ -241,6 +242,12 @@ export function ServiceWorkspace({ activeSlug, title, subtitle }: ServiceWorkspa
     try {
       setIsSubmitting(true);
       setFeedback(null);
+      let proofUrl = depositProof.dataUrl;
+      try {
+        proofUrl = await uploadToCloudinary(depositProof.dataUrl, "proofs");
+      } catch (uploadErr) {
+        console.warn("Cloudinary upload fallback:", uploadErr);
+      }
       await createDepositTransaction({
         userId,
         service: service.name,
@@ -251,7 +258,7 @@ export function ServiceWorkspace({ activeSlug, title, subtitle }: ServiceWorkspa
         destinationDetails: referenceEntry
           ? buildDepositDetails(service.name, referenceEntry[0], reference)
           : undefined,
-        proofOfPaymentUrl: depositProof.dataUrl,
+        proofOfPaymentUrl: proofUrl,
       });
       setDepositValues({});
       setDepositProof(null);
@@ -304,6 +311,12 @@ export function ServiceWorkspace({ activeSlug, title, subtitle }: ServiceWorkspa
     try {
       setIsSubmitting(true);
       setFeedback(null);
+      let proofUrl = withdrawalProof.dataUrl;
+      try {
+        proofUrl = await uploadToCloudinary(withdrawalProof.dataUrl, "proofs");
+      } catch (uploadErr) {
+        console.warn("Cloudinary upload fallback:", uploadErr);
+      }
       await createWithdrawalTransaction({
         userId,
         service: service.name,
@@ -314,7 +327,7 @@ export function ServiceWorkspace({ activeSlug, title, subtitle }: ServiceWorkspa
           ...withdrawalValues,
           bonusWithdrawalRequested: requestBonusWithdrawal ? "Yes" : "No",
         },
-        proofOfPaymentUrl: withdrawalProof.dataUrl,
+        proofOfPaymentUrl: proofUrl,
       });
       setWithdrawalValues({});
       setWithdrawalProof(null);

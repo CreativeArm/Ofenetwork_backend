@@ -30,9 +30,10 @@ import { KycService } from "./modules/kyc/kyc.service";
 import { SupportService } from "./modules/support/support.service";
 import { PaymentMethodsController } from "./modules/payment-methods/payment-methods.controller";
 import { PaymentMethodsService } from "./modules/payment-methods/payment-methods.service";
+import { UploadModule } from "./modules/upload/upload.module";
 
 @Module({
-  imports: [JwtModule.register({})],
+  imports: [JwtModule.register({}), UploadModule],
   controllers: [
     AppController,
     AuthController,

@@ -41,6 +41,11 @@ coverage/
 # Prisma
 .prisma/
 
+# Backups & dumps
+backups/
+backend/backups/
+*.sql
+
 # Misc
 .DS_Store
 Thumbs.db

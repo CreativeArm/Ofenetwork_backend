@@ -9,6 +9,7 @@ import { useBodyScrollLock } from "../lib/use-body-scroll-lock";
 import { BonusBalanceAmount } from "./bonus-balance";
 import { SearchProvider, useGlobalSearch } from "../lib/search-context";
 import { ServiceIcon, type ServiceIconName } from "./service-icon";
+import { uploadToCloudinary } from "../lib/upload-service";
 import { Icon } from "./icons";
 
 interface AppShellProps {
@@ -327,7 +328,13 @@ function AppShellInner({ children, activeSlug, title, subtitle, admin = false }:
       setIsProfileImageSaving(true);
       setProfileFeedback(null);
       const dataUrl = await readImageAsDataUrl(file);
-      const updatedUser = await updateUserProfilePicture(storedUserId, dataUrl);
+      let imageUrl = dataUrl;
+      try {
+        imageUrl = await uploadToCloudinary(dataUrl, "avatars");
+      } catch (uploadErr) {
+        console.warn("Cloudinary upload fallback:", uploadErr);
+      }
+      const updatedUser = await updateUserProfilePicture(storedUserId, imageUrl);
       setProfileImage(updatedUser.profileImageUrl ?? null);
       removeStoredProfileImage();
       setProfileFeedback("Profile picture saved.");

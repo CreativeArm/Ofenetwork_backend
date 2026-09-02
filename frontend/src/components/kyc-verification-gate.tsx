@@ -8,6 +8,7 @@ import {
   type BackendUser,
 } from "../lib/admin-backend";
 import { Icon } from "./icons";
+import { uploadToCloudinary } from "../lib/upload-service";
 
 type StoredUser = {
   id?: string;
@@ -185,10 +186,16 @@ export function KycVerificationGate({
     try {
       setIsSubmitting(true);
       setFeedback(null);
+      let docUrl = upload.dataUrl;
+      try {
+        docUrl = await uploadToCloudinary(upload.dataUrl, "kyc");
+      } catch (uploadErr) {
+        console.warn("Cloudinary upload fallback:", uploadErr);
+      }
       const updated = await submitKyc({
         userId,
         documentType,
-        documentUrl: upload.dataUrl,
+        documentUrl: docUrl,
         notes: notes.trim() || undefined,
       });
       setUser(updated);

@@ -11,6 +11,7 @@ import {
   type BackendBuy4MeOrder,
 } from "../lib/admin-backend";
 import { buy4MeCategories, buy4MeSteps, supportReasons } from "../lib/mock-data";
+import { uploadToCloudinary } from "../lib/upload-service";
 import { useBodyScrollLock } from "../lib/use-body-scroll-lock";
 import { KycVerificationGate } from "./kyc-verification-gate";
 import {
@@ -318,9 +319,15 @@ export function Buy4MeWorkspace() {
     try {
       setIsSubmittingPayment(true);
       setFeedback(null);
+      let proofUrl = selectedProof.dataUrl;
+      try {
+        proofUrl = await uploadToCloudinary(selectedProof.dataUrl, "proofs");
+      } catch (uploadErr) {
+        console.warn("Cloudinary upload fallback:", uploadErr);
+      }
       const updated = await submitBuy4MePayment(activeOrder.id, {
         paymentMethod: selectedPaymentMethod.label,
-        proofOfPaymentUrl: selectedProof.dataUrl,
+        proofOfPaymentUrl: proofUrl,
       });
 
       setOrders((current) =>
