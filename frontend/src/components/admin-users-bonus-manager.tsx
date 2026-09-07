@@ -93,7 +93,11 @@ export function AdminUsersBonusManager({ users = [] }: AdminUsersBonusManagerPro
 
   useEffect(() => {
     loadUsers();
-    const interval = window.setInterval(() => loadUsers(true), 25000);
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        loadUsers(true);
+      }
+    }, 45000);
     const onFocus = () => loadUsers(true);
     window.addEventListener("focus", onFocus);
     return () => {

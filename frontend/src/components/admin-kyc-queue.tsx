@@ -110,7 +110,11 @@ export function AdminKycQueue({ items = [] }: AdminKycQueueProps) {
 
   useEffect(() => {
     loadKycRecords();
-    const interval = window.setInterval(() => loadKycRecords(true), 25000);
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        loadKycRecords(true);
+      }
+    }, 45000);
     const onFocus = () => loadKycRecords(true);
     window.addEventListener("focus", onFocus);
     return () => {

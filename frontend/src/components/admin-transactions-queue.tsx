@@ -191,7 +191,11 @@ export function AdminTransactionsQueue({ items = [] }: AdminTransactionsQueuePro
 
   useEffect(() => {
     loadTransactions();
-    const interval = window.setInterval(() => loadTransactions(true), 25000);
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        loadTransactions(true);
+      }
+    }, 45000);
     const onFocus = () => loadTransactions(true);
     window.addEventListener("focus", onFocus);
     return () => {

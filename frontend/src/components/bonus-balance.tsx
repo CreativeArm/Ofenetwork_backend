@@ -81,7 +81,11 @@ export function BonusBalanceAmount({
     };
 
     loadBalance();
-    const interval = window.setInterval(loadBalance, 10000);
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        loadBalance();
+      }
+    }, 45000);
     window.addEventListener("focus", loadBalance);
     window.addEventListener(BONUS_BALANCE_UPDATED_EVENT, handleBonusUpdate);
 

@@ -233,7 +233,11 @@ export function Buy4MeWorkspace() {
     const handleFocus = () => loadOrders(false);
 
     loadOrders();
-    const interval = window.setInterval(() => loadOrders(false), 10000);
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        loadOrders(false);
+      }
+    }, 45000);
     window.addEventListener("focus", handleFocus);
 
     return () => {

@@ -172,7 +172,11 @@ export function AdminBuy4MeQueue({ items = [] }: AdminBuy4MeQueueProps) {
 
   useEffect(() => {
     loadOrders();
-    const interval = window.setInterval(() => loadOrders(true), 25000);
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        loadOrders(true);
+      }
+    }, 45000);
     const onFocus = () => loadOrders(true);
     window.addEventListener("focus", onFocus);
     return () => {
