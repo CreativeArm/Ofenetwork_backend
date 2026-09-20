@@ -8,12 +8,15 @@ import { EmailService } from "./infrastructure/email/email.service";
 import { RedisService } from "./infrastructure/redis/redis.service";
 
 function getAllowedOrigins() {
-  // CORS_ORIGIN may contain several comma-separated sites (for example the
-  // production site and a www alias). Keep FRONTEND_URL in the list as it is
-  // also used by the OAuth redirect flow.
   const configuredOrigins = [
     process.env.CORS_ORIGIN,
     process.env.FRONTEND_URL,
+    "https://ofenetworks.com",
+    "https://www.ofenetworks.com",
+    "https://ofenetwork.ng",
+    "https://www.ofenetwork.ng",
+    "http://localhost:3000",
+    "http://localhost:3001",
   ].filter(Boolean).join(",");
   const origins = [...new Set(configuredOrigins
     .split(",")
@@ -68,7 +71,14 @@ async function bootstrap() {
   app.useBodyParser("urlencoded", { limit: "15mb", extended: true });
   app.enableCors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes("*") || allowedOrigins.includes(origin.replace(/\/$/, ""))) {
+      if (
+        !origin ||
+        allowedOrigins.includes("*") ||
+        allowedOrigins.includes(origin.replace(/\/$/, "")) ||
+        /^https?:\/\/(www\.)?ofenetworks?\.(com|ng)$/i.test(origin) ||
+        /^https?:\/\/.*\.vercel\.app$/i.test(origin) ||
+        /^https?:\/\/.*\.onrender\.com$/i.test(origin)
+      ) {
         callback(null, true);
         return;
       }

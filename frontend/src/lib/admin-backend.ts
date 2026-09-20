@@ -329,13 +329,29 @@ async function fetchApi<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 async function mutateApi<T>(path: string, init: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(init.headers ?? {}),
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(init.headers ?? {}),
+      },
+    });
+  } catch (err) {
+    const raw = err instanceof Error ? err.message : "";
+    if (
+      raw === "Load failed" ||
+      raw === "Failed to fetch" ||
+      raw.includes("NetworkError") ||
+      raw.includes("aborted")
+    ) {
+      throw new Error(
+        "Network connection issue. Please check your connection and try again.",
+      );
+    }
+    throw err;
+  }
 
   if (!response.ok) {
     const rawMessage = await response.text();

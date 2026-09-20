@@ -42,16 +42,21 @@ export class CloudinaryService {
       );
     }
 
+    const isImage = fileData.startsWith("data:image/") || !fileData.startsWith("data:");
+    const uploadOptions: Record<string, any> = {
+      folder: `ofenetworks/${folder}`,
+      resource_type: isImage ? "image" : "auto",
+    };
+
+    if (isImage) {
+      uploadOptions.quality = "auto:good";
+      uploadOptions.fetch_format = "auto";
+    }
+
     return new Promise((resolve, reject) => {
       cloudinary.uploader.upload(
         fileData,
-        {
-          folder: `ofenetworks/${folder}`,
-          resource_type: "auto",
-          transformation: [
-            { quality: "auto:good", fetch_format: "auto" },
-          ],
-        },
+        uploadOptions,
         (error, result?: UploadApiResponse) => {
           if (error || !result) {
             this.logger.error("Cloudinary upload error", error);

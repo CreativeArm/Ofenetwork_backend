@@ -8,7 +8,7 @@ import {
   type BackendUser,
 } from "../lib/admin-backend";
 import { Icon } from "./icons";
-import { uploadToCloudinary } from "../lib/upload-service";
+import { compressImageDataUrl, uploadToCloudinary } from "../lib/upload-service";
 
 type StoredUser = {
   id?: string;
@@ -162,14 +162,21 @@ export function KycVerificationGate({
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      setFeedback("Please choose a file below 5MB.");
+    if (file.size > 15 * 1024 * 1024) {
+      setFeedback("Please choose a file below 15MB.");
       return;
     }
 
-    const dataUrl = await readFileAsDataUrl(file);
-    setUpload({ name: file.name, dataUrl });
-    setFeedback(`${file.name} is ready for KYC submission.`);
+    try {
+      let dataUrl = await readFileAsDataUrl(file);
+      if (file.type.startsWith("image/")) {
+        dataUrl = await compressImageDataUrl(dataUrl);
+      }
+      setUpload({ name: file.name, dataUrl });
+      setFeedback(`${file.name} is ready for KYC submission.`);
+    } catch (err) {
+      setFeedback(err instanceof Error ? err.message : "Unable to process the selected file.");
+    }
   };
 
   const handleSubmit = async () => {
@@ -205,9 +212,17 @@ export function KycVerificationGate({
       window.localStorage.setItem("ofe_user", JSON.stringify(updated));
       setFeedback("KYC submitted successfully. Our team will review it shortly.");
     } catch (error) {
-      setFeedback(
-        error instanceof Error ? error.message : "Unable to submit KYC right now.",
-      );
+      const raw = error instanceof Error ? error.message : "";
+      if (
+        raw === "Load failed" ||
+        raw === "Failed to fetch" ||
+        raw.includes("NetworkError") ||
+        raw.includes("aborted")
+      ) {
+        setFeedback("Network connection issue. Please check your internet connection and try again.");
+      } else {
+        setFeedback(raw || "Unable to submit KYC right now.");
+      }
     } finally {
       setIsSubmitting(false);
     }
